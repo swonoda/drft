@@ -1,0 +1,138 @@
+:root {
+  --paper: #fdfdff;
+  --ice: #f7f9fd;
+  --ice-strong: #edf2fb;
+  --ink: #29394c;
+  --line: #e1e6f0;
+  --accent: #6879a9;
+  --accent-dark: #485a83;
+  --muted: #778294;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+}
+body {
+  display: grid;
+  grid-template-rows: 54px 1fr;
+}
+header {
+  display: flex;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--ice);
+}
+button,
+input,
+textarea {
+  font: inherit;
+}
+button {
+  padding: 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+#filter {
+  flex: 1;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+}
+main {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  min-height: 0;
+}
+aside {
+  overflow: auto;
+  border-right: 1px solid var(--line);
+  padding: 8px;
+  background: var(--ice);
+}
+.entry {
+  padding: 9px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.entry:hover,
+.entry.selected {
+  background: var(--ice-strong);
+}
+.entry.selected {
+  font-weight: 600;
+  color: var(--accent-dark);
+}
+#detail {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 16px;
+  padding: 22px;
+  min-width: 0;
+}
+#detail.empty {
+  visibility: hidden;
+}
+label {
+  display: grid;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.description {
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  align-content: start;
+}
+#heading,
+textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  color: var(--ink);
+}
+#heading {
+  font-size: 17px;
+}
+textarea {
+  height: 100%;
+  resize: none;
+  line-height: 1.7;
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.actions #saveState {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
+.danger {
+  color: #a3495c;
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>辞書 — DRFT</title>
+    <link rel="icon" href="../build/favicon.png" />
+    <link rel="stylesheet" href="dictionary.css" />
+  </head>
+  <body>
+    <header>
+      <input id="filter" type="search" placeholder="辞書を検索" />
+      <button id="add">＋ 追加</button>
+    </header>
+    <main>
+      <aside id="entryList"></aside>
+      <section id="detail" class="empty">
+        <label>見出し<input id="heading" /></label>
+        <label class="description"
+          >説明<textarea id="description"></textarea>
+        </label>
+        <div class="actions">
+          <span id="saveState"></span>
+          <button id="saveDictionary" disabled>保存</button>
+          <button id="find">本文中を検索</button>
+          <button id="remove" class="danger">削除</button>
+        </div>
+      </section>
+    </main>
+    <script src="dictionary-renderer.cjs"></script>
+  </body>
+</html>

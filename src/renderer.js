@@ -1,0 +1,470 @@
+import {
+  parseDocument,
+  renderBody,
+  inlineMarkup,
+  manuscriptCharacterCount,
+  manuscriptSheetCount,
+  moveParagraphSection,
+  findFixMarks,
+  renderPreviewDocument,
+} from "./parser.js";
+const $ = (id) => document.getElementById(id);
+const editor = $("editor"),
+  preview = $("preview"),
+  previewContent = $("previewContent"),
+  outline = $("outline"),
+  fixList = $("fixList"),
+  state = $("state");
+let filePath = null,
+  dirty = false,
+  renderTimer,
+  saveTimer,
+  cursorFrame,
+  currentPage = 0;
+
+function setState(s) {
+  state.textContent = s;
+}
+function updateCharacterCount() {
+  const count = manuscriptCharacterCount(editor.value);
+  const sheets = manuscriptSheetCount(editor.value);
+  $("characterCount").textContent =
+    `${count.toLocaleString("ja-JP")}字　原稿用紙 ${sheets.toLocaleString("ja-JP")}枚`;
+}
+function update() {
+  const doc = parseDocument(editor.value);
+  document.title = `${doc.title.trim() || "無題"} — DRFT`;
+  const fixes = findFixMarks(editor.value);
+  previewContent.innerHTML = renderPreviewDocument(
+    editor.value,
+    editor.selectionStart,
+  );
+  outline.replaceChildren();
+  let chapterSeen = false;
+  doc.sections.forEach((item, index) => {
+    if (item.type === "chapter") chapterSeen = true;
+    const el = document.createElement("div");
+    el.className = `outline-item ${item.type}`;
+    el.textContent = item.label;
+    el.draggable = item.type === "paragraph";
+    el.dataset.index = index;
+    if (item.type === "paragraph" && !chapterSeen) el.style.paddingLeft = "8px";
+    el.onclick = () => jumpToLine(item.start);
+    el.addEventListener("dragstart", (e) =>
+      e.dataTransfer.setData("text/plain", index),
+    );
+    el.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      el.classList.add("drag-over");
+    });
+    el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+    el.addEventListener("drop", (e) => {
+      e.preventDefault();
+      el.classList.remove("drag-over");
+      const rect = el.getBoundingClientRect();
+      const after =
+        item.type === "chapter" || e.clientY > rect.top + rect.height / 2;
+      moveParagraph(+e.dataTransfer.getData("text/plain"), index, after);
+    });
+    outline.append(el);
+  });
+  fixList.replaceChildren();
+  fixes.forEach((fix, index) => {
+    const el = document.createElement("button");
+    el.className = "fix-item";
+    const comment = document.createElement("strong");
+    comment.textContent = fix.comment || "コメントなし";
+    const context = document.createElement("span");
+    context.textContent = fix.context || `修正マーク ${index + 1}`;
+    el.append(comment, context);
+    el.onclick = () => revealEditorPosition(fix.start, fix.end);
+    fixList.append(el);
+  });
+  if (!fixes.length) {
+    const empty = document.createElement("p");
+    empty.className = "fix-empty";
+    empty.textContent = "修正マークはありません";
+    fixList.append(empty);
+  }
+  $("fixBadge").textContent = fixes.length;
+  requestAnimationFrame(() => {
+    if ($("previewPane").classList.contains("open")) syncPreviewToCaret();
+    else {
+      currentPage = Math.min(currentPage, pageCount() - 1);
+      preview.scrollLeft = Math.max(
+        0,
+        preview.scrollWidth -
+          preview.clientWidth -
+          currentPage * preview.clientWidth,
+      );
+      updatePageState();
+    }
+  });
+  updateCharacterCount();
+}
+function showSideView(view) {
+  const fixes = view === "fix";
+  outline.hidden = fixes;
+  fixList.hidden = !fixes;
+  $("outlineTab").classList.toggle("active", !fixes);
+  $("fixTab").classList.toggle("active", fixes);
+}
+function pageCount() {
+  return Math.max(
+    1,
+    Math.ceil(previewContent.scrollWidth / preview.clientWidth),
+  );
+}
+function updatePageState() {
+  const count = pageCount();
+  currentPage = Math.max(0, Math.min(currentPage, count - 1));
+  $("pageState").textContent = `${currentPage + 1} / ${count}`;
+  $("pageBack").disabled = currentPage === 0;
+  $("pageForward").disabled = currentPage >= count - 1;
+}
+function syncPreviewToCaret() {
+  const marker = previewContent.querySelector(".preview-caret");
+  if (!marker) {
+    preview.scrollLeft = Math.max(
+      0,
+      preview.scrollWidth -
+        preview.clientWidth -
+        currentPage * preview.clientWidth,
+    );
+    updatePageState();
+    return;
+  }
+  const markerRect = marker.getBoundingClientRect();
+  const contentRect = previewContent.getBoundingClientRect();
+  const markerCenter = markerRect.left + markerRect.width / 2;
+  const fromRight = Math.max(0, contentRect.right - markerCenter);
+  currentPage = Math.min(
+    pageCount() - 1,
+    Math.max(0, Math.floor(fromRight / preview.clientWidth)),
+  );
+  preview.scrollLeft = Math.max(
+    0,
+    preview.scrollWidth -
+      preview.clientWidth -
+      currentPage * preview.clientWidth,
+  );
+  updatePageState();
+}
+function cursorMoved() {
+  if (!$("previewPane").classList.contains("open")) return;
+  cancelAnimationFrame(cursorFrame);
+  cursorFrame = requestAnimationFrame(() => {
+    previewContent.innerHTML = renderPreviewDocument(
+      editor.value,
+      editor.selectionStart,
+    );
+    requestAnimationFrame(syncPreviewToCaret);
+  });
+}
+function revealEditorPosition(start, end = start) {
+  const style = getComputedStyle(editor);
+  const mirror = document.createElement("div");
+  const properties = [
+    "boxSizing",
+    "fontFamily",
+    "fontSize",
+    "fontStyle",
+    "fontWeight",
+    "letterSpacing",
+    "lineHeight",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "borderTopWidth",
+    "borderRightWidth",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "tabSize",
+    "textIndent",
+    "textTransform",
+    "wordSpacing",
+  ];
+  Object.assign(mirror.style, {
+    position: "fixed",
+    left: "-100000px",
+    top: "0",
+    width: `${editor.clientWidth}px`,
+    height: "auto",
+    visibility: "hidden",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "break-word",
+    wordBreak: "normal",
+  });
+  for (const property of properties) mirror.style[property] = style[property];
+  mirror.append(document.createTextNode(editor.value.slice(0, start)));
+  const marker = document.createElement("span");
+  marker.textContent =
+    editor.value.slice(start, Math.max(start + 1, end)) || "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const targetTop = marker.offsetTop;
+  mirror.remove();
+
+  editor.setSelectionRange(start, end);
+  editor.focus({ preventScroll: true });
+  editor.scrollTop = Math.max(0, targetTop - editor.clientHeight / 3);
+}
+function goToPage(page) {
+  currentPage = Math.max(0, Math.min(page, pageCount() - 1));
+  preview.scrollTo({
+    left: Math.max(
+      0,
+      preview.scrollWidth -
+        preview.clientWidth -
+        currentPage * preview.clientWidth,
+    ),
+    behavior: "smooth",
+  });
+  window.setTimeout(updatePageState, 240);
+}
+function jumpToLine(line) {
+  const lines = editor.value.split("\n");
+  let p = 0;
+  for (let i = 0; i < line; i++) p += lines[i].length + 1;
+  revealEditorPosition(p);
+}
+function moveParagraph(from, to, after = false) {
+  const doc = parseDocument(editor.value);
+  const moved = moveParagraphSection(doc, from, to, after);
+  if (moved === null) return;
+  editor.value = moved;
+  changed();
+}
+function changed() {
+  dirty = true;
+  updateCharacterCount();
+  setState(filePath ? `未保存 — ${filePath}` : "未保存 — 新規");
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(update, 180);
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(autoSave, 1200);
+}
+async function autoSave() {
+  if (dirty && filePath) {
+    await window.desktop.save(editor.value);
+    dirty = false;
+    setState(`自動保存済み — ${filePath}`);
+  }
+}
+editor.addEventListener("input", changed);
+editor.addEventListener("select", cursorMoved);
+editor.addEventListener("click", cursorMoved);
+editor.addEventListener("keyup", cursorMoved);
+$("outlineTab").onclick = () => showSideView("outline");
+$("fixTab").onclick = () => showSideView("fix");
+update();
+async function newDocument() {
+  if (dirty && !window.confirm("未保存の変更を破棄して新規作成しますか？"))
+    return;
+  await window.desktop.newFile();
+  filePath = null;
+  editor.value = "タイトル\n\n\n第一章\n\nここから本文を書きます。";
+  dirty = false;
+  currentPage = 0;
+  update();
+  setState("新規");
+  editor.focus();
+}
+async function openDocument() {
+  if (dirty && !window.confirm("未保存の変更を破棄して別の原稿を開きますか？"))
+    return;
+  const r = await window.desktop.open();
+  if (r) {
+    filePath = r.path;
+    editor.value = r.text;
+    dirty = false;
+    update();
+    setState(filePath);
+  }
+}
+async function openWorkspace() {
+  if (
+    dirty &&
+    !window.confirm("未保存の変更を破棄して作品フォルダを開きますか？")
+  )
+    return;
+  const result = await window.desktop.openWorkspace();
+  if (!result) return;
+  filePath = result.path;
+  editor.value = result.text;
+  dirty = false;
+  currentPage = 0;
+  update();
+  setState(`${filePath} — 作品フォルダ`);
+}
+async function saveDocument() {
+  let p = filePath
+    ? await window.desktop.save(editor.value)
+    : await window.desktop.saveAs(editor.value);
+  if (p) {
+    filePath = p;
+    dirty = false;
+    setState(`保存済み — ${p}`);
+  }
+}
+async function saveDocumentAs() {
+  const p = await window.desktop.saveAs(editor.value);
+  if (p) {
+    filePath = p;
+    dirty = false;
+    setState(`保存済み — ${p}`);
+  }
+}
+function openFindDialog(focusReplacement = false) {
+  if (!$("findDialog").open) $("findDialog").showModal();
+  $(focusReplacement ? "replacement" : "needle").focus();
+}
+function togglePreview() {
+  setPreviewOpen(!$("previewPane").classList.contains("open"));
+}
+function setPreviewOpen(open) {
+  $("previewPane").classList.toggle("open", open);
+  document.querySelector("main").classList.toggle("preview-open", open);
+  $("previewToggle").classList.toggle("active", open);
+  $("previewToggle").setAttribute("aria-pressed", String(open));
+  $("previewToggle").setAttribute(
+    "aria-label",
+    open ? "縦書きプレビューを閉じる" : "縦書きプレビューを表示",
+  );
+  $("previewToggle").title = open
+    ? "縦書きプレビューを閉じる"
+    : "縦書きプレビューを表示";
+  update();
+}
+function toggleOutline() {
+  document.querySelector("main").classList.toggle("outline-hidden");
+}
+$("previewToggle").onclick = togglePreview;
+$("pageForward").onclick = () => goToPage(currentPage + 1);
+$("pageBack").onclick = () => goToPage(currentPage - 1);
+preview.addEventListener(
+  "wheel",
+  (event) => {
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    event.preventDefault();
+    goToPage(currentPage + (event.deltaY > 0 ? 1 : -1));
+  },
+  { passive: false },
+);
+preview.addEventListener("scrollend", () => {
+  const remaining =
+    preview.scrollWidth - preview.clientWidth - preview.scrollLeft;
+  currentPage = Math.round(Math.max(0, remaining) / preview.clientWidth);
+  updatePageState();
+});
+function findNext() {
+  const n = $("needle").value;
+  if (!n) return;
+  let at = editor.value.indexOf(n, editor.selectionEnd);
+  if (at < 0) at = editor.value.indexOf(n);
+  if (at >= 0) {
+    revealEditorPosition(at, at + n.length);
+  }
+}
+function findDictionaryHeading(heading) {
+  if (!heading) return;
+  const matches = [];
+  let offset = editor.value.indexOf(heading);
+  while (offset >= 0) {
+    matches.push(offset);
+    offset = editor.value.indexOf(heading, offset + heading.length);
+  }
+  if (!matches.length) {
+    setState(`辞書「${heading}」— 本文内に見つかりません`);
+    return;
+  }
+  const next = matches.findIndex((position) => position >= editor.selectionEnd);
+  const index = next >= 0 ? next : 0;
+  const position = matches[index];
+  revealEditorPosition(position, position + heading.length);
+  setState(`辞書「${heading}」— ${index + 1} / ${matches.length}`);
+}
+$("findNext").onclick = findNext;
+$("replaceOne").onclick = () => {
+  const n = $("needle").value;
+  if (editor.value.slice(editor.selectionStart, editor.selectionEnd) === n) {
+    editor.setRangeText($("replacement").value);
+    changed();
+  }
+  findNext();
+};
+$("replaceAll").onclick = () => {
+  const n = $("needle").value;
+  if (n) {
+    editor.value = editor.value.split(n).join($("replacement").value);
+    changed();
+  }
+};
+function openSettings() {
+  if (!$("settingsDialog").open) $("settingsDialog").showModal();
+}
+const displaySettings = [
+  ["font", "--font", ""],
+  ["fontSize", "--size", "px"],
+  ["letterSpacing", "--ls", "em"],
+  ["lineHeight", "--lh", ""],
+  ["lineChars", "--line-chars", ""],
+  ["verticalMargin", "--vertical-margin", "px"],
+  ["horizontalMargin", "--horizontal-margin", "px"],
+];
+if (!localStorage.getItem("display.verticalMargin")) {
+  const savedMargin = localStorage.getItem("display.margin");
+  const savedPadding = localStorage.getItem("display.padding");
+  const oldMargin = Number(savedMargin);
+  const oldPadding = Number(savedPadding);
+  if (
+    savedMargin !== null &&
+    savedPadding !== null &&
+    Number.isFinite(oldMargin) &&
+    Number.isFinite(oldPadding)
+  ) {
+    const inherited = Math.min(160, oldMargin + oldPadding);
+    localStorage.setItem("display.verticalMargin", inherited);
+    localStorage.setItem("display.horizontalMargin", inherited);
+  }
+}
+for (const [id, key, suffix] of displaySettings) {
+  const control = $(id),
+    saved = localStorage.getItem(`display.${id}`);
+  if (saved !== null) control.value = saved;
+  const applySetting = () => {
+    document.documentElement.style.setProperty(key, control.value + suffix);
+  };
+  applySetting();
+  control.oninput = () => {
+    applySetting();
+    localStorage.setItem(`display.${id}`, control.value);
+  };
+}
+async function exportPdf() {
+  const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><style>@page{size:A5;margin:18mm;marks:crop cross;bleed:3mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}</style><h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>${renderBody(editor.value)}</html>`;
+  const p = await window.desktop.exportPdf(html);
+  if (p) setState(`PDF出力済み — ${p}`);
+}
+
+window.desktop.onMenuCommand((command) => {
+  if (typeof command === "object" && command.type === "dictionary-find") {
+    findDictionaryHeading(command.heading);
+    return;
+  }
+  const actions = {
+    new: newDocument,
+    open: openDocument,
+    "open-workspace": openWorkspace,
+    save: saveDocument,
+    "save-as": saveDocumentAs,
+    pdf: exportPdf,
+    find: () => openFindDialog(false),
+    replace: () => openFindDialog(true),
+    "toggle-outline": toggleOutline,
+    "toggle-preview": togglePreview,
+    settings: openSettings,
+  };
+  actions[command]?.();
+});

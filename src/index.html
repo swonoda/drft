@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>DRFT — 小説執筆用エディタ</title>
+    <link rel="icon" href="../build/favicon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <button
+        id="previewToggle"
+        class="header-icon"
+        type="button"
+        title="縦書きプレビューを表示"
+        aria-label="縦書きプレビューを表示"
+        aria-pressed="false"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M5 4.5h6.5c1.1 0 2 .9 2 2v13H7a2 2 0 0 1-2-2v-13Zm8.5 2c0-1.1.9-2 2-2H19v13a2 2 0 0 1-2 2h-3.5v-13Z"
+          />
+          <path d="M8 8h2M8 11h2M16 8h1M16 11h1M16 14h1" />
+        </svg>
+      </button>
+    </header>
+    <main>
+      <aside>
+        <div class="aside-tabs" role="tablist" aria-label="サイドビュー">
+          <button id="outlineTab" class="active" role="tab">構成</button>
+          <button id="fixTab" role="tab">
+            修正 <span id="fixBadge">0</span>
+          </button>
+        </div>
+        <div id="outline" class="side-view"></div>
+        <div id="fixList" class="side-view" hidden></div>
+      </aside>
+      <section class="editor-pane">
+        <textarea id="editor" spellcheck="false" aria-label="本文">
+タイトル
+
+
+第一章
+
+ここから本文を書きます。</textarea>
+      </section>
+      <section class="preview-pane" id="previewPane">
+        <div class="preview-head">
+          <div class="page-nav">
+            <button id="pageForward" aria-label="次のページ">‹</button
+            ><span id="pageState">1 / 1</span
+            ><button id="pageBack" aria-label="前のページ">›</button>
+          </div>
+        </div>
+        <div class="page-stage">
+          <article id="preview">
+            <div id="previewContent" class="preview-content"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+    <footer>
+      <span id="state">新規</span>
+      <span id="characterCount">0字　原稿用紙 0枚</span>
+    </footer>
+    <dialog id="findDialog">
+      <form method="dialog">
+        <h3>検索・置換</h3>
+        <label>検索<input id="needle" /></label
+        ><label>置換<input id="replacement" /></label>
+        <div>
+          <button type="button" id="findNext">次を検索</button
+          ><button type="button" id="replaceOne">置換</button
+          ><button type="button" id="replaceAll">すべて置換</button
+          ><button>閉じる</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="settingsDialog">
+      <form method="dialog">
+        <h3>表示設定</h3>
+        <label
+          >フォント<input id="font" value="Yu Mincho, YuMincho, serif" /></label
+        ><label
+          >文字サイズ<input
+            id="fontSize"
+            type="number"
+            min="10"
+            max="40"
+            value="18"
+          />
+          px</label
+        ><label
+          >文字間<input
+            id="letterSpacing"
+            type="number"
+            min="-0.2"
+            max="1"
+            step="0.05"
+            value="0"
+          />
+          em</label
+        ><label
+          >行間<input
+            id="lineHeight"
+            type="number"
+            min="1"
+            max="3"
+            step="0.05"
+            value="1.75" /></label
+        ><label
+          >一行の文字数<input
+            id="lineChars"
+            type="number"
+            min="10"
+            max="80"
+            step="1"
+            value="40"
+          />
+          字</label
+        ><label
+          >上下余白<input
+            id="verticalMargin"
+            type="number"
+            min="0"
+            max="160"
+            value="56"
+          />
+          px</label
+        ><label
+          >左右余白<input
+            id="horizontalMargin"
+            type="number"
+            min="0"
+            max="320"
+            value="56"
+          />
+          px</label
+        ><button>閉じる</button>
+      </form>
+    </dialog>
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>

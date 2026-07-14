@@ -1,0 +1,47 @@
+{
+  "name": "ryuhyo-editor",
+  "version": "0.1.0",
+  "description": "横書きで書き、縦書きで確かめる小説エディタ",
+  "license": "MIT",
+  "main": "src/main.cjs",
+  "type": "module",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist:win": "electron-builder --win nsis portable"
+  },
+  "devDependencies": {
+    "electron": "^43.1.0",
+    "electron-builder": "^26.0.12",
+    "prettier": "^3.9.5"
+  },
+  "build": {
+    "appId": "jp.ryuhyo.editor",
+    "productName": "DRFT",
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/icon.ico",
+      "build/favicon.png",
+      "LICENSE",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1"
+  }
+}
