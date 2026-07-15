@@ -42,6 +42,7 @@
     }
   },
   "dependencies": {
+    "iconv-lite": "^0.7.3",
     "pdf-lib": "^1.17.1"
   }
 }

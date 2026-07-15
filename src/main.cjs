@@ -2,13 +2,42 @@ const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
+const { decodeText, encodeText } = require("./text-encoding.cjs");
+const {
+  EMPTY_SESSION,
+  readSessionState,
+  writeSessionState,
+  dictionaryFilePath,
+} = require("./session-state.cjs");
 
 let win;
 let dictionaryWin;
 let splashWin;
 let currentPath = null;
 let workspacePath = null;
+let sessionState = { ...EMPTY_SESSION };
+let sessionWrite = Promise.resolve();
+let isQuitting = false;
 const appIcon = path.join(__dirname, "../build/icon.png");
+
+function sessionFile() {
+  return path.join(app.getPath("userData"), "session.json");
+}
+
+function persistSession(patch) {
+  sessionState = { ...sessionState, ...patch };
+  const snapshot = { ...sessionState };
+  sessionWrite = sessionWrite
+    .catch(() => {})
+    .then(() => writeSessionState(sessionFile(), snapshot));
+  return sessionWrite;
+}
+
+function useDocument(file) {
+  currentPath = file;
+  workspacePath = file ? path.dirname(file) : null;
+  persistSession({ currentPath: file });
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -105,6 +134,7 @@ function openDictionaryWindow() {
     dictionaryWin.focus();
     return;
   }
+  persistSession({ dictionaryOpen: true });
   dictionaryWin = new BrowserWindow({
     width: 760,
     height: 580,
@@ -123,6 +153,7 @@ function openDictionaryWindow() {
   dictionaryWin.once("ready-to-show", () => dictionaryWin.show());
   dictionaryWin.on("closed", () => {
     dictionaryWin = null;
+    if (!isQuitting) persistSession({ dictionaryOpen: false });
   });
 }
 
@@ -251,12 +282,18 @@ function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   app.setName("DRFT");
+  sessionState = await readSessionState(sessionFile());
+  currentPath = sessionState.currentPath;
+  workspacePath = currentPath ? path.dirname(currentPath) : null;
   if (process.platform === "darwin") app.dock.setIcon(appIcon);
   createMenu();
   createSplashWindow();
   createWindow();
+});
+app.on("before-quit", () => {
+  isQuitting = true;
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -269,15 +306,35 @@ ipcMain.handle("file:open", async () => {
   });
   if (r.canceled) return null;
   closeDictionaryWindow();
-  currentPath = r.filePaths[0];
-  workspacePath = path.dirname(currentPath);
-  return { path: currentPath, text: await fs.readFile(currentPath, "utf8") };
+  useDocument(r.filePaths[0]);
+  const document = decodeText(await fs.readFile(currentPath));
+  return { path: currentPath, ...document };
 });
+
+ipcMain.handle("file:restore", async () => {
+  if (!currentPath) return null;
+  try {
+    const document = decodeText(await fs.readFile(currentPath));
+    return {
+      path: currentPath,
+      ...document,
+      dictionaryOpen: sessionState.dictionaryOpen,
+    };
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    useDocument(null);
+    await persistSession({ dictionaryOpen: false });
+    return null;
+  }
+});
+
+ipcMain.handle("file:default", () =>
+  fs.readFile(path.join(__dirname, "default.txt"), "utf8"),
+);
 
 ipcMain.handle("file:new", () => {
   closeDictionaryWindow();
-  currentPath = null;
-  workspacePath = null;
+  useDocument(null);
 });
 
 ipcMain.handle("workspace:open", async () => {
@@ -289,52 +346,63 @@ ipcMain.handle("workspace:open", async () => {
   const manuscript = await chooseWorkspaceManuscript(folder);
   if (!manuscript) return null;
   closeDictionaryWindow();
+  useDocument(manuscript);
   workspacePath = folder;
-  currentPath = manuscript;
   return {
     path: manuscript,
-    text: await fs.readFile(manuscript, "utf8"),
+    ...decodeText(await fs.readFile(manuscript)),
     workspace: folder,
   };
 });
 
 ipcMain.handle("dictionary:load", async () => {
-  const file = path.join(workspacePath || path.dirname(currentPath), "辞書.md");
+  const file = dictionaryFilePath(currentPath);
   try {
     return await fs.readFile(file, "utf8");
   } catch (error) {
-    if (error.code === "ENOENT") return "";
+    if (error.code === "ENOENT") {
+      const legacy = path.join(path.dirname(currentPath), "辞書.md");
+      try {
+        return await fs.readFile(legacy, "utf8");
+      } catch (legacyError) {
+        if (legacyError.code === "ENOENT") return "";
+        throw legacyError;
+      }
+    }
     throw error;
   }
 });
 
 ipcMain.handle("dictionary:save", async (_event, markdown) => {
   if (!currentPath) throw new Error("原稿が開かれていません");
-  const folder = workspacePath || path.dirname(currentPath);
+  const folder = path.dirname(currentPath);
   await fs.mkdir(folder, { recursive: true });
-  const file = path.join(folder, "辞書.md");
+  const file = dictionaryFilePath(currentPath);
   await fs.writeFile(file, markdown, "utf8");
   return file;
 });
+
+ipcMain.handle("dictionary:open", () => openDictionaryWindow());
 
 ipcMain.handle("dictionary:find", (_event, heading) => {
   sendMenuCommand({ type: "dictionary-find", heading });
 });
 
-ipcMain.handle("file:saveAs", async (_e, text) => {
+ipcMain.handle("file:saveAs", async (_e, text, encoding) => {
   const r = await dialog.showSaveDialog(win, {
     defaultPath: currentPath || "新しい小説.txt",
     filters: [{ name: "テキスト", extensions: ["txt"] }],
   });
   if (r.canceled) return null;
-  currentPath = r.filePath.endsWith(".txt") ? r.filePath : `${r.filePath}.txt`;
-  await fs.writeFile(currentPath, text, "utf8");
+  closeDictionaryWindow();
+  useDocument(r.filePath.endsWith(".txt") ? r.filePath : `${r.filePath}.txt`);
+  await fs.writeFile(currentPath, encodeText(text, encoding));
   return currentPath;
 });
 
-ipcMain.handle("file:save", async (_e, text) => {
+ipcMain.handle("file:save", async (_e, text, encoding) => {
   if (!currentPath) return null;
-  await fs.writeFile(currentPath, text, "utf8");
+  await fs.writeFile(currentPath, encodeText(text, encoding));
   return currentPath;
 });
 

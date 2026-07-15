@@ -87,6 +87,7 @@ button:hover {
   color: var(--accent);
 }
 #state {
+  margin-right: auto;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
@@ -96,12 +97,45 @@ button:hover {
 footer {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 14px;
   padding: 0 16px;
   border-top: 1px solid var(--line);
   background: var(--ice);
   color: var(--muted);
   font-size: 12px;
+}
+.status-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
+}
+.encoding-status select {
+  appearance: none;
+  padding: 2px 5px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.encoding-status select:hover,
+.encoding-status select:focus-visible {
+  outline: 0;
+  background: var(--ice-strong);
+  color: var(--accent-dark);
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 #characterCount {
   font-variant-numeric: tabular-nums;
