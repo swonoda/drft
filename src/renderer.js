@@ -8,6 +8,11 @@ import {
   findFixMarks,
   renderPreviewDocument,
 } from "./parser.js";
+import {
+  previewPageBodyWidth,
+  previewPageCount,
+  previewPageForOffset,
+} from "./preview-layout.js";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor"),
   preview = $("preview"),
@@ -42,6 +47,7 @@ function update() {
       editor.value,
       editor.selectionStart,
     );
+    installPreviewCaretAnchor();
   }
   outline.replaceChildren();
   let chapterSeen = false;
@@ -102,10 +108,22 @@ function showSideView(view) {
   $("fixTab").classList.toggle("active", fixes);
 }
 function pageCount() {
+  return previewPageCount(previewContent.scrollWidth, pageWidth());
+}
+function pageWidth() {
+  const style = getComputedStyle(preview);
   return Math.max(
     1,
-    Math.ceil(previewContent.scrollWidth / preview.clientWidth),
+    preview.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight),
   );
+}
+function showCurrentPage() {
+  const count = pageCount();
+  currentPage = Math.max(0, Math.min(currentPage, count - 1));
+  previewContent.style.transform = `translateX(${currentPage * pageWidth()}px)`;
+  updatePageState();
 }
 function updatePageState() {
   const count = pageCount();
@@ -115,32 +133,20 @@ function updatePageState() {
   $("pageForward").disabled = currentPage >= count - 1;
 }
 function syncPreviewToCaret() {
-  const marker = previewContent.querySelector(".preview-caret");
+  previewContent.style.transform = "translateX(0)";
+  const marker = previewContent.querySelector(
+    ".preview-caret-anchor, .preview-highlight",
+  );
   if (!marker) {
-    preview.scrollLeft = Math.max(
-      0,
-      preview.scrollWidth -
-        preview.clientWidth -
-        currentPage * preview.clientWidth,
-    );
-    updatePageState();
+    showCurrentPage();
     return;
   }
   const markerRect = marker.getBoundingClientRect();
   const contentRect = previewContent.getBoundingClientRect();
   const markerCenter = markerRect.left + markerRect.width / 2;
   const fromRight = Math.max(0, contentRect.right - markerCenter);
-  currentPage = Math.min(
-    pageCount() - 1,
-    Math.max(0, Math.floor(fromRight / preview.clientWidth)),
-  );
-  preview.scrollLeft = Math.max(
-    0,
-    preview.scrollWidth -
-      preview.clientWidth -
-      currentPage * preview.clientWidth,
-  );
-  updatePageState();
+  currentPage = previewPageForOffset(fromRight, pageWidth(), pageCount());
+  showCurrentPage();
 }
 function cursorMoved() {
   if (!$("previewPane").classList.contains("open")) return;
@@ -150,8 +156,39 @@ function cursorMoved() {
       editor.value,
       editor.selectionStart,
     );
+    installPreviewCaretAnchor();
     requestAnimationFrame(syncPreviewToCaret);
   });
+}
+function installPreviewCaretAnchor() {
+  const highlight = previewContent.querySelector(".preview-highlight");
+  if (!highlight) return;
+  let remaining = Number(highlight.dataset.caretOffset) || 0;
+  const walker = document.createTreeWalker(highlight, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      return node.parentElement?.closest("rt")
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  let node;
+  while ((node = walker.nextNode())) {
+    if (remaining <= node.data.length) {
+      const anchor = document.createElement("span");
+      anchor.className = "preview-caret-anchor";
+      anchor.setAttribute("aria-hidden", "true");
+      const range = document.createRange();
+      range.setStart(node, remaining);
+      range.collapse(true);
+      range.insertNode(anchor);
+      return;
+    }
+    remaining -= node.data.length;
+  }
+  const anchor = document.createElement("span");
+  anchor.className = "preview-caret-anchor";
+  anchor.setAttribute("aria-hidden", "true");
+  highlight.append(anchor);
 }
 function revealEditorPosition(start, end = start) {
   const style = getComputedStyle(editor);
@@ -204,16 +241,7 @@ function revealEditorPosition(start, end = start) {
 }
 function goToPage(page) {
   currentPage = Math.max(0, Math.min(page, pageCount() - 1));
-  preview.scrollTo({
-    left: Math.max(
-      0,
-      preview.scrollWidth -
-        preview.clientWidth -
-        currentPage * preview.clientWidth,
-    ),
-    behavior: "smooth",
-  });
-  window.setTimeout(updatePageState, 240);
+  showCurrentPage();
 }
 function jumpToLine(line) {
   const lines = editor.value.split("\n");
@@ -298,23 +326,6 @@ async function openDocument() {
     setState(filePath);
   }
 }
-async function openWorkspace() {
-  if (
-    dirty &&
-    !window.confirm("未保存の変更を破棄して作品フォルダを開きますか？")
-  )
-    return;
-  const result = await window.desktop.openWorkspace();
-  if (!result) return;
-  filePath = result.path;
-  encoding = result.encoding;
-  $("encoding").value = encoding;
-  editor.value = result.text;
-  dirty = false;
-  currentPage = 0;
-  update();
-  setState(`${filePath} — 作品フォルダ`);
-}
 async function saveDocument() {
   let p = filePath
     ? await window.desktop.save(editor.value, encoding)
@@ -360,21 +371,10 @@ function toggleOutline() {
 $("previewToggle").onclick = togglePreview;
 $("pageForward").onclick = () => goToPage(currentPage + 1);
 $("pageBack").onclick = () => goToPage(currentPage - 1);
-preview.addEventListener(
-  "wheel",
-  (event) => {
-    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
-    event.preventDefault();
-    goToPage(currentPage + (event.deltaY > 0 ? 1 : -1));
-  },
-  { passive: false },
-);
-preview.addEventListener("scrollend", () => {
-  const remaining =
-    preview.scrollWidth - preview.clientWidth - preview.scrollLeft;
-  currentPage = Math.round(Math.max(0, remaining) / preview.clientWidth);
-  updatePageState();
-});
+new ResizeObserver(() => {
+  if ($("previewPane").classList.contains("open"))
+    requestAnimationFrame(syncPreviewToCaret);
+}).observe(preview);
 function findNext() {
   const n = $("needle").value;
   if (!n) return;
@@ -427,9 +427,25 @@ const displaySettings = [
   ["letterSpacing", "--ls", "em"],
   ["lineHeight", "--lh", ""],
   ["lineChars", "--line-chars", ""],
+  ["previewLines", null, ""],
   ["verticalMargin", "--vertical-margin", "px"],
   ["horizontalMargin", "--horizontal-margin", "px"],
 ];
+function applyPreviewPageSize() {
+  const bodyWidth = previewPageBodyWidth(
+    $("fontSize").value,
+    $("lineHeight").value,
+    $("previewLines").value,
+  );
+  document.documentElement.style.setProperty(
+    "--preview-page-width",
+    `${bodyWidth + 64}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--preview-pane-width",
+    `${bodyWidth + 120}px`,
+  );
+}
 if (!localStorage.getItem("display.verticalMargin")) {
   const savedMargin = localStorage.getItem("display.margin");
   const savedPadding = localStorage.getItem("display.padding");
@@ -451,14 +467,19 @@ for (const [id, key, suffix] of displaySettings) {
     saved = localStorage.getItem(`display.${id}`);
   if (saved !== null) control.value = saved;
   const applySetting = () => {
-    document.documentElement.style.setProperty(key, control.value + suffix);
+    if (key)
+      document.documentElement.style.setProperty(key, control.value + suffix);
   };
   applySetting();
   control.oninput = () => {
     applySetting();
     localStorage.setItem(`display.${id}`, control.value);
+    applyPreviewPageSize();
+    if ($("previewPane").classList.contains("open"))
+      requestAnimationFrame(syncPreviewToCaret);
   };
 }
+applyPreviewPageSize();
 async function exportPdf() {
   const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><style>@page{size:A5;margin:18mm;marks:crop cross;bleed:3mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}</style><h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>${renderBody(editor.value)}</html>`;
   const p = await window.desktop.exportPdf(html);
@@ -473,7 +494,6 @@ window.desktop.onMenuCommand((command) => {
   const actions = {
     new: newDocument,
     open: openDocument,
-    "open-workspace": openWorkspace,
     save: saveDocument,
     "save-as": saveDocumentAs,
     pdf: exportPdf,

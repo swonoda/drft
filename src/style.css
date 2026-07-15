@@ -6,6 +6,8 @@
   --lh: 1.75;
   --ls: 0em;
   --line-chars: 40;
+  --preview-page-width: 568px;
+  --preview-pane-width: 624px;
   --ink: #29394c;
   --paper: #fdfdff;
   --ice: #f7f9fd;
@@ -150,13 +152,17 @@ main {
   transition: grid-template-columns 0.22s ease;
 }
 main.preview-open {
-  grid-template-columns: 230px minmax(0, 1fr) min(720px, 46vw);
+  grid-template-columns:
+    230px minmax(0, 1fr)
+    min(var(--preview-pane-width), 48vw);
 }
 main.outline-hidden {
   grid-template-columns: 0 minmax(0, 1fr) 0;
 }
 main.outline-hidden.preview-open {
-  grid-template-columns: 0 minmax(0, 1fr) min(720px, 46vw);
+  grid-template-columns:
+    0 minmax(0, 1fr)
+    min(var(--preview-pane-width), 48vw);
 }
 main.outline-hidden aside {
   visibility: hidden;
@@ -325,7 +331,7 @@ aside {
 .page-stage {
   display: grid;
   place-items: center;
-  overflow: auto;
+  overflow: hidden;
   padding: 28px;
   background: var(--paper);
 }
@@ -355,25 +361,23 @@ textarea::selection {
   color: #2f4162;
 }
 article {
-  width: min(560px, 100%);
+  position: relative;
+  width: min(var(--preview-page-width), 100%);
   height: calc(var(--line-chars) * (var(--size) + var(--ls)) + 64px);
   max-height: 100%;
   padding: 32px;
   background: var(--paper);
   border: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-behavior: smooth;
-  scrollbar-width: none;
+  overflow: hidden;
   box-shadow: none;
 }
-article::-webkit-scrollbar {
-  display: none;
-}
 .preview-content {
+  position: absolute;
+  top: 32px;
+  right: 32px;
   width: max-content;
-  min-width: 100%;
-  height: 100%;
+  min-width: calc(100% - 64px);
+  height: calc(100% - 64px);
   font-family: var(--font);
   font-size: var(--size);
   line-height: var(--lh);
@@ -388,6 +392,7 @@ article::-webkit-scrollbar {
   column-fill: auto;
   column-gap: 3.5em;
   column-rule: 0;
+  transform: translateX(0);
 }
 .preview-content p {
   margin: 0 0 0 1.15em;
@@ -400,26 +405,19 @@ article::-webkit-scrollbar {
   break-after: avoid;
   break-inside: avoid;
 }
-.preview-caret {
-  border-radius: 0.12em;
-  background: #6879a9;
-  color: #fff;
-  box-shadow: 0 0 0 1px #dfe6f6;
+.preview-highlight {
+  border-radius: 0.16em;
+  background: #e4f2cc;
+  box-decoration-break: clone;
+  color: #304637;
+  box-shadow: inset 0 0 0 1px #d2e6b2;
+  -webkit-box-decoration-break: clone;
 }
-.preview-caret:empty {
+.preview-caret-anchor {
   position: relative;
   display: inline-block;
   width: 0;
   height: 0;
-  box-shadow: none;
-}
-.preview-caret:empty::after {
-  position: absolute;
-  width: 1em;
-  height: 2px;
-  border-radius: 1px;
-  background: #6879a9;
-  content: "";
 }
 ruby {
   ruby-position: over;
