@@ -1,6 +1,6 @@
 {
   "name": "ryuhyo-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "横書きで書き、縦書きで確かめる小説エディタ",
   "license": "MIT",
   "main": "src/main.cjs",

@@ -432,10 +432,15 @@ const displaySettings = [
   ["horizontalMargin", "--horizontal-margin", "px"],
 ];
 function applyPreviewPageSize() {
+  const linePitch = Number($("fontSize").value) * Number($("lineHeight").value);
   const bodyWidth = previewPageBodyWidth(
     $("fontSize").value,
     $("lineHeight").value,
     $("previewLines").value,
+  );
+  document.documentElement.style.setProperty(
+    "--preview-line-pitch",
+    `${linePitch}px`,
   );
   document.documentElement.style.setProperty(
     "--preview-page-width",
