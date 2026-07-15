@@ -14,7 +14,6 @@ let win;
 let dictionaryWin;
 let splashWin;
 let currentPath = null;
-let workspacePath = null;
 let sessionState = { ...EMPTY_SESSION };
 let sessionWrite = Promise.resolve();
 let isQuitting = false;
@@ -35,7 +34,6 @@ function persistSession(patch) {
 
 function useDocument(file) {
   currentPath = file;
-  workspacePath = file ? path.dirname(file) : null;
   persistSession({ currentPath: file });
 }
 
@@ -96,36 +94,11 @@ function closeDictionaryWindow() {
   if (dictionaryWin && !dictionaryWin.isDestroyed()) dictionaryWin.close();
 }
 
-async function chooseWorkspaceManuscript(folder) {
-  const names = (await fs.readdir(folder))
-    .filter(
-      (name) => name.toLowerCase().endsWith(".txt") && !name.startsWith("."),
-    )
-    .sort((a, b) => a.localeCompare(b, "ja"));
-  if (!names.length) {
-    await dialog.showMessageBox(win, {
-      type: "info",
-      message: "このフォルダにはTXT原稿がありません。",
-    });
-    return null;
-  }
-  if (names.length === 1) return path.join(folder, names[0]);
-  const result = await dialog.showMessageBox(win, {
-    type: "question",
-    message: "主原稿を選んでください",
-    buttons: [...names, "キャンセル"],
-    cancelId: names.length,
-  });
-  return result.response < names.length
-    ? path.join(folder, names[result.response])
-    : null;
-}
-
 function openDictionaryWindow() {
   if (!currentPath) {
     dialog.showMessageBox(win, {
       type: "info",
-      message: "先に原稿または作品フォルダを開いてください。",
+      message: "先に原稿を開くか、原稿を保存してください。",
     });
     return;
   }
@@ -191,11 +164,6 @@ function createMenu() {
           label: "開く…",
           accelerator: "CmdOrCtrl+O",
           click: () => sendMenuCommand("open"),
-        },
-        {
-          label: "作品フォルダを開く…",
-          accelerator: "CmdOrCtrl+Shift+O",
-          click: () => sendMenuCommand("open-workspace"),
         },
         { type: "separator" },
         {
@@ -286,7 +254,6 @@ app.whenReady().then(async () => {
   app.setName("DRFT");
   sessionState = await readSessionState(sessionFile());
   currentPath = sessionState.currentPath;
-  workspacePath = currentPath ? path.dirname(currentPath) : null;
   if (process.platform === "darwin") app.dock.setIcon(appIcon);
   createMenu();
   createSplashWindow();
@@ -335,24 +302,6 @@ ipcMain.handle("file:default", () =>
 ipcMain.handle("file:new", () => {
   closeDictionaryWindow();
   useDocument(null);
-});
-
-ipcMain.handle("workspace:open", async () => {
-  const result = await dialog.showOpenDialog(win, {
-    properties: ["openDirectory"],
-  });
-  if (result.canceled) return null;
-  const folder = result.filePaths[0];
-  const manuscript = await chooseWorkspaceManuscript(folder);
-  if (!manuscript) return null;
-  closeDictionaryWindow();
-  useDocument(manuscript);
-  workspacePath = folder;
-  return {
-    path: manuscript,
-    ...decodeText(await fs.readFile(manuscript)),
-    workspace: folder,
-  };
 });
 
 ipcMain.handle("dictionary:load", async () => {

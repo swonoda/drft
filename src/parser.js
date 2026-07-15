@@ -40,51 +40,46 @@ function safeCaretIndex(input, index) {
   return Math.max(0, Math.min(index, input.length));
 }
 
-function markFirstRenderedCharacter(html) {
-  const tokens = /<[^>]+>|&[^;\s]+;|[\s\S]/gu;
-  let inRubyText = false;
-  let match;
-  while ((match = tokens.exec(html))) {
-    const token = match[0];
-    if (/^<rt\b/i.test(token)) inRubyText = true;
-    if (/^<\/rt\b/i.test(token)) inRubyText = false;
-    if (token.startsWith("<") || inRubyText) continue;
-    if (token === "\n") return null;
-    return `${html.slice(0, match.index)}<span class="preview-caret">${token}</span>${html.slice(match.index + token.length)}`;
-  }
-  return null;
-}
+const sentenceEnd = /[。！？!?]/u;
+const sentenceCloser = /[」』）】》〉]/u;
 
-function markLastRenderedCharacter(html) {
-  const tokens = /<[^>]+>|&[^;\s]+;|[\s\S]/gu;
-  let inRubyText = false;
-  let candidate = null;
-  let match;
-  while ((match = tokens.exec(html))) {
-    const token = match[0];
-    if (/^<rt\b/i.test(token)) inRubyText = true;
-    if (/^<\/rt\b/i.test(token)) inRubyText = false;
-    if (!token.startsWith("<") && !inRubyText && token !== "\n") {
-      candidate = { index: match.index, token };
+export function sentenceRangeAt(input, index) {
+  if (!input.length) return { start: 0, end: 0 };
+  const caret = Math.max(0, Math.min(index, input.length));
+  let anchor = Math.min(caret, input.length - 1);
+
+  // 文末記号や閉じ括弧の直後にあるカーソルは、直前の文へ属させる。
+  let previous = caret - 1;
+  while (previous >= 0 && sentenceCloser.test(input[previous])) previous--;
+  if (previous >= 0 && sentenceEnd.test(input[previous])) anchor = previous;
+
+  let start = anchor;
+  while (start > 0) {
+    const character = input[start - 1];
+    if (character === "\n" || sentenceEnd.test(character)) break;
+    start--;
+  }
+
+  let end = anchor;
+  while (end < input.length && input[end] !== "\n") {
+    if (sentenceEnd.test(input[end])) {
+      end++;
+      while (end < input.length && sentenceCloser.test(input[end])) end++;
+      break;
     }
+    end++;
   }
-  if (!candidate) {
-    return `<span class="preview-caret" aria-hidden="true"></span>${html}`;
-  }
-  const end = candidate.index + candidate.token.length;
-  return `${html.slice(0, candidate.index)}<span class="preview-caret">${candidate.token}</span>${html.slice(end)}`;
+  return { start, end };
 }
 
 export function inlineMarkupWithCaret(input, index) {
   const split = safeCaretIndex(input, index);
-  const before = stripFixMarks(input.slice(0, split));
-  const after = stripFixMarks(input.slice(split));
-  const beforeHtml = inlineMarkup(before);
-  const afterHtml = inlineMarkup(after);
-  const markedAfter = markFirstRenderedCharacter(afterHtml);
-  return markedAfter === null
-    ? `${markLastRenderedCharacter(beforeHtml)}${afterHtml}`
-    : `${beforeHtml}${markedAfter}`;
+  const { start, end } = sentenceRangeAt(input, split);
+  const before = inlineMarkup(stripFixMarks(input.slice(0, start)));
+  const sentence = inlineMarkup(stripFixMarks(input.slice(start, end)));
+  const after = inlineMarkup(stripFixMarks(input.slice(end)));
+  const caretOffset = manuscriptText(input.slice(start, split)).length;
+  return `${before}<span class="preview-highlight" data-caret-offset="${caretOffset}">${sentence}</span>${after}`;
 }
 
 export function stripFixMarks(input) {
