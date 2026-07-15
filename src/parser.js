@@ -41,30 +41,50 @@ function safeCaretIndex(input, index) {
 }
 
 function markFirstRenderedCharacter(html) {
-  let index = 0;
-  while (index < html.length) {
-    if (html[index] === "<") {
-      const tagEnd = html.indexOf(">", index);
-      if (tagEnd < 0) break;
-      index = tagEnd + 1;
-      continue;
-    }
-    if (html[index] === "\n") break;
-    const end =
-      html[index] === "&"
-        ? html.indexOf(";", index) + 1
-        : index + [...html.slice(index)][0].length;
-    if (end <= index) break;
-    return `${html.slice(0, index)}<span class="preview-caret">${html.slice(index, end)}</span>${html.slice(end)}`;
+  const tokens = /<[^>]+>|&[^;\s]+;|[\s\S]/gu;
+  let inRubyText = false;
+  let match;
+  while ((match = tokens.exec(html))) {
+    const token = match[0];
+    if (/^<rt\b/i.test(token)) inRubyText = true;
+    if (/^<\/rt\b/i.test(token)) inRubyText = false;
+    if (token.startsWith("<") || inRubyText) continue;
+    if (token === "\n") return null;
+    return `${html.slice(0, match.index)}<span class="preview-caret">${token}</span>${html.slice(match.index + token.length)}`;
   }
-  return `<span class="preview-caret" aria-hidden="true"></span>${html}`;
+  return null;
+}
+
+function markLastRenderedCharacter(html) {
+  const tokens = /<[^>]+>|&[^;\s]+;|[\s\S]/gu;
+  let inRubyText = false;
+  let candidate = null;
+  let match;
+  while ((match = tokens.exec(html))) {
+    const token = match[0];
+    if (/^<rt\b/i.test(token)) inRubyText = true;
+    if (/^<\/rt\b/i.test(token)) inRubyText = false;
+    if (!token.startsWith("<") && !inRubyText && token !== "\n") {
+      candidate = { index: match.index, token };
+    }
+  }
+  if (!candidate) {
+    return `<span class="preview-caret" aria-hidden="true"></span>${html}`;
+  }
+  const end = candidate.index + candidate.token.length;
+  return `${html.slice(0, candidate.index)}<span class="preview-caret">${candidate.token}</span>${html.slice(end)}`;
 }
 
 export function inlineMarkupWithCaret(input, index) {
   const split = safeCaretIndex(input, index);
   const before = stripFixMarks(input.slice(0, split));
   const after = stripFixMarks(input.slice(split));
-  return `${inlineMarkup(before)}${markFirstRenderedCharacter(inlineMarkup(after))}`;
+  const beforeHtml = inlineMarkup(before);
+  const afterHtml = inlineMarkup(after);
+  const markedAfter = markFirstRenderedCharacter(afterHtml);
+  return markedAfter === null
+    ? `${markLastRenderedCharacter(beforeHtml)}${afterHtml}`
+    : `${beforeHtml}${markedAfter}`;
 }
 
 export function stripFixMarks(input) {
@@ -213,11 +233,11 @@ export function renderBody(text, caretOffset = null) {
 export function renderPreviewDocument(text, caretOffset = null) {
   const normalized = text.replaceAll("\r\n", "\n");
   const title = normalized.split("\n")[0] || "無題";
-  const titleHtml =
-    caretOffset !== null && caretOffset <= title.length
-      ? inlineMarkupWithCaret(title, caretOffset)
-      : inlineMarkup(title);
-  return `<h1>${titleHtml}</h1>${renderBody(normalized, caretOffset)}`;
+  const titleActive = caretOffset !== null && caretOffset <= title.length;
+  const titleHtml = titleActive
+    ? inlineMarkupWithCaret(title, caretOffset)
+    : inlineMarkup(title);
+  return `<h1>${titleHtml}</h1>${renderBody(normalized, titleActive ? null : caretOffset)}`;
 }
 
 export function serializeDocument(title, sections) {

@@ -37,13 +37,7 @@
         <div id="fixList" class="side-view" hidden></div>
       </aside>
       <section class="editor-pane">
-        <textarea id="editor" spellcheck="false" aria-label="本文">
-タイトル
-
-
-第一章
-
-ここから本文を書きます。</textarea>
+        <textarea id="editor" spellcheck="false" aria-label="本文"></textarea>
       </section>
       <section class="preview-pane" id="previewPane">
         <div class="preview-head">
@@ -62,7 +56,16 @@
     </main>
     <footer>
       <span id="state">新規</span>
-      <span id="characterCount">0字　原稿用紙 0枚</span>
+      <div class="status-right">
+        <label class="encoding-status" title="保存時の文字コード">
+          <span class="visually-hidden">文字コード</span>
+          <select id="encoding">
+            <option value="utf8">UTF-8</option>
+            <option value="shift_jis">Shift_JIS</option>
+          </select>
+        </label>
+        <span id="characterCount">0字　原稿用紙 0枚</span>
+      </div>
     </footer>
     <dialog id="findDialog">
       <form method="dialog">

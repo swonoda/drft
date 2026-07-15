@@ -16,6 +16,7 @@ const editor = $("editor"),
   fixList = $("fixList"),
   state = $("state");
 let filePath = null,
+  encoding = "utf8",
   dirty = false,
   renderTimer,
   saveTimer,
@@ -35,10 +36,13 @@ function update() {
   const doc = parseDocument(editor.value);
   document.title = `${doc.title.trim() || "無題"} — DRFT`;
   const fixes = findFixMarks(editor.value);
-  previewContent.innerHTML = renderPreviewDocument(
-    editor.value,
-    editor.selectionStart,
-  );
+  const previewOpen = $("previewPane").classList.contains("open");
+  if (previewOpen) {
+    previewContent.innerHTML = renderPreviewDocument(
+      editor.value,
+      editor.selectionStart,
+    );
+  }
   outline.replaceChildren();
   let chapterSeen = false;
   doc.sections.forEach((item, index) => {
@@ -87,19 +91,7 @@ function update() {
     fixList.append(empty);
   }
   $("fixBadge").textContent = fixes.length;
-  requestAnimationFrame(() => {
-    if ($("previewPane").classList.contains("open")) syncPreviewToCaret();
-    else {
-      currentPage = Math.min(currentPage, pageCount() - 1);
-      preview.scrollLeft = Math.max(
-        0,
-        preview.scrollWidth -
-          preview.clientWidth -
-          currentPage * preview.clientWidth,
-      );
-      updatePageState();
-    }
-  });
+  if (previewOpen) requestAnimationFrame(syncPreviewToCaret);
   updateCharacterCount();
 }
 function showSideView(view) {
@@ -238,7 +230,6 @@ function moveParagraph(from, to, after = false) {
 }
 function changed() {
   dirty = true;
-  updateCharacterCount();
   setState(filePath ? `未保存 — ${filePath}` : "未保存 — 新規");
   clearTimeout(renderTimer);
   renderTimer = setTimeout(update, 180);
@@ -247,7 +238,7 @@ function changed() {
 }
 async function autoSave() {
   if (dirty && filePath) {
-    await window.desktop.save(editor.value);
+    await window.desktop.save(editor.value, encoding);
     dirty = false;
     setState(`自動保存済み — ${filePath}`);
   }
@@ -258,13 +249,35 @@ editor.addEventListener("click", cursorMoved);
 editor.addEventListener("keyup", cursorMoved);
 $("outlineTab").onclick = () => showSideView("outline");
 $("fixTab").onclick = () => showSideView("fix");
-update();
+$("encoding").onchange = () => {
+  encoding = $("encoding").value;
+  changed();
+};
+loadInitialDocument();
+async function loadInitialDocument() {
+  const restored = await window.desktop.restoreDocument();
+  if (restored) {
+    filePath = restored.path;
+    encoding = restored.encoding;
+    $("encoding").value = encoding;
+    editor.value = restored.text;
+  } else {
+    editor.value = await window.desktop.defaultDocument();
+  }
+  editor.setSelectionRange(0, 0);
+  update();
+  setState(filePath || "新規");
+  editor.focus();
+  if (restored?.dictionaryOpen) await window.desktop.openDictionary();
+}
 async function newDocument() {
   if (dirty && !window.confirm("未保存の変更を破棄して新規作成しますか？"))
     return;
   await window.desktop.newFile();
   filePath = null;
-  editor.value = "タイトル\n\n\n第一章\n\nここから本文を書きます。";
+  encoding = "utf8";
+  $("encoding").value = encoding;
+  editor.value = "";
   dirty = false;
   currentPage = 0;
   update();
@@ -277,6 +290,8 @@ async function openDocument() {
   const r = await window.desktop.open();
   if (r) {
     filePath = r.path;
+    encoding = r.encoding;
+    $("encoding").value = encoding;
     editor.value = r.text;
     dirty = false;
     update();
@@ -292,6 +307,8 @@ async function openWorkspace() {
   const result = await window.desktop.openWorkspace();
   if (!result) return;
   filePath = result.path;
+  encoding = result.encoding;
+  $("encoding").value = encoding;
   editor.value = result.text;
   dirty = false;
   currentPage = 0;
@@ -300,8 +317,8 @@ async function openWorkspace() {
 }
 async function saveDocument() {
   let p = filePath
-    ? await window.desktop.save(editor.value)
-    : await window.desktop.saveAs(editor.value);
+    ? await window.desktop.save(editor.value, encoding)
+    : await window.desktop.saveAs(editor.value, encoding);
   if (p) {
     filePath = p;
     dirty = false;
@@ -309,7 +326,7 @@ async function saveDocument() {
   }
 }
 async function saveDocumentAs() {
-  const p = await window.desktop.saveAs(editor.value);
+  const p = await window.desktop.saveAs(editor.value, encoding);
   if (p) {
     filePath = p;
     dirty = false;
