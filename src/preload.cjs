@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("desktop", {
   open: () => ipcRenderer.invoke("file:open"),
   save: (text, encoding) => ipcRenderer.invoke("file:save", text, encoding),
   saveAs: (text, encoding) => ipcRenderer.invoke("file:saveAs", text, encoding),
+  saveSnapshot: (text, encoding) =>
+    ipcRenderer.invoke("file:snapshot", text, encoding),
   exportPdf: (html) => ipcRenderer.invoke("file:exportPdf", html),
   openDictionary: () => ipcRenderer.invoke("dictionary:open"),
   onMenuCommand: (callback) =>

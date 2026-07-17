@@ -344,6 +344,10 @@ async function saveDocumentAs() {
     setState(`保存済み — ${p}`);
   }
 }
+async function saveSnapshot() {
+  const p = await window.desktop.saveSnapshot(editor.value, encoding);
+  if (p) setState(`スナップショット保存済み — ${p}`);
+}
 function openFindDialog(focusReplacement = false) {
   if (!$("findDialog").open) $("findDialog").showModal();
   $(focusReplacement ? "replacement" : "needle").focus();
@@ -501,6 +505,7 @@ window.desktop.onMenuCommand((command) => {
     open: openDocument,
     save: saveDocument,
     "save-as": saveDocumentAs,
+    snapshot: saveSnapshot,
     pdf: exportPdf,
     find: () => openFindDialog(false),
     replace: () => openFindDialog(true),
