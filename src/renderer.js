@@ -12,6 +12,7 @@ import {
   previewPageBodyWidth,
   previewPageCount,
   previewPageForOffset,
+  editorMarginWithPreview,
 } from "./preview-layout.js";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor"),
@@ -367,6 +368,7 @@ function setPreviewOpen(open) {
   $("previewToggle").title = open
     ? "縦書きプレビューを閉じる"
     : "縦書きプレビューを表示";
+  updateEditorHorizontalMargin();
   update();
 }
 function toggleOutline() {
@@ -376,9 +378,10 @@ $("previewToggle").onclick = togglePreview;
 $("pageForward").onclick = () => goToPage(currentPage + 1);
 $("pageBack").onclick = () => goToPage(currentPage - 1);
 new ResizeObserver(() => {
+  updateEditorHorizontalMargin();
   if ($("previewPane").classList.contains("open"))
     requestAnimationFrame(syncPreviewToCaret);
-}).observe(preview);
+}).observe($("previewPane"));
 function findNext() {
   const n = $("needle").value;
   if (!n) return;
@@ -455,6 +458,17 @@ function applyPreviewPageSize() {
     `${bodyWidth + 120}px`,
   );
 }
+function updateEditorHorizontalMargin() {
+  const previewWidth = $("previewPane").getBoundingClientRect().width;
+  const effectiveMargin = editorMarginWithPreview(
+    $("horizontalMargin").value,
+    previewWidth,
+  );
+  document.documentElement.style.setProperty(
+    "--editor-horizontal-margin",
+    `${effectiveMargin}px`,
+  );
+}
 if (!localStorage.getItem("display.verticalMargin")) {
   const savedMargin = localStorage.getItem("display.margin");
   const savedPadding = localStorage.getItem("display.padding");
@@ -484,11 +498,13 @@ for (const [id, key, suffix] of displaySettings) {
     applySetting();
     localStorage.setItem(`display.${id}`, control.value);
     applyPreviewPageSize();
+    updateEditorHorizontalMargin();
     if ($("previewPane").classList.contains("open"))
       requestAnimationFrame(syncPreviewToCaret);
   };
 }
 applyPreviewPageSize();
+updateEditorHorizontalMargin();
 async function exportPdf() {
   const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><style>@page{size:A5;margin:18mm;marks:crop cross;bleed:3mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}</style><h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>${renderBody(editor.value)}</html>`;
   const p = await window.desktop.exportPdf(html);
