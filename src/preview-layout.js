@@ -19,3 +19,16 @@ export function previewPageForOffset(offsetFromRight, pageWidth, pageCount) {
     ),
   );
 }
+
+export function editorMarginWithPreview(
+  configuredMargin,
+  previewWidth,
+  minimumMargin = 40,
+) {
+  const margin = Number(configuredMargin);
+  const width = Number(previewWidth);
+  const minimum = Number(minimumMargin);
+  if (![margin, width, minimum].every(Number.isFinite)) return minimumMargin;
+  if (width <= 0) return Math.max(0, margin);
+  return Math.max(minimum, margin - Math.max(0, width) / 2);
+}
