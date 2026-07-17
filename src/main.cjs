@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
+const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -175,6 +176,10 @@ function createMenu() {
           label: "名前をつけて保存…",
           accelerator: "CmdOrCtrl+Shift+S",
           click: () => sendMenuCommand("save-as"),
+        },
+        {
+          label: "スナップショットを保存…",
+          click: () => sendMenuCommand("snapshot"),
         },
         { type: "separator" },
         {
@@ -353,6 +358,17 @@ ipcMain.handle("file:save", async (_e, text, encoding) => {
   if (!currentPath) return null;
   await fs.writeFile(currentPath, encodeText(text, encoding));
   return currentPath;
+});
+
+ipcMain.handle("file:snapshot", async (_e, text, encoding) => {
+  const r = await dialog.showSaveDialog(win, {
+    defaultPath: snapshotDefaultPath(currentPath),
+    filters: [{ name: "テキスト", extensions: ["txt"] }],
+  });
+  if (r.canceled) return null;
+  const file = ensureTxtExtension(r.filePath);
+  await fs.writeFile(file, encodeText(text, encoding));
+  return file;
 });
 
 ipcMain.handle("file:exportPdf", async (_e, html) => {
