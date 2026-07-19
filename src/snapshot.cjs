@@ -25,6 +25,7 @@ function snapshotDefaultPath(currentPath, date = new Date()) {
   const parsed = path.parse(currentPath);
   return path.join(
     parsed.dir,
+    "スナップショット",
     `${parsed.name}_スナップショット_${timestamp}.txt`,
   );
 }

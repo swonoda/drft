@@ -361,8 +361,12 @@ ipcMain.handle("file:save", async (_e, text, encoding) => {
 });
 
 ipcMain.handle("file:snapshot", async (_e, text, encoding) => {
+  const defaultPath = snapshotDefaultPath(currentPath);
+  if (currentPath) {
+    await fs.mkdir(path.dirname(defaultPath), { recursive: true });
+  }
   const r = await dialog.showSaveDialog(win, {
-    defaultPath: snapshotDefaultPath(currentPath),
+    defaultPath,
     filters: [{ name: "テキスト", extensions: ["txt"] }],
   });
   if (r.canceled) return null;
