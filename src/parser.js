@@ -86,6 +86,82 @@ export function stripFixMarks(input) {
   return input.replace(/#fix\[[^\]]*\]/g, "");
 }
 
+function fixSentenceRangeAt(input, markerStart, markerEnd) {
+  const previous = input[markerStart - 1];
+  const startsSentence =
+    markerStart === 0 || previous === "\n" || sentenceEnd.test(previous);
+  const hasFollowingText = /\S/u.test(input.slice(markerEnd));
+
+  if (startsSentence && hasFollowingText) {
+    const following = sentenceRangeAt(input, markerEnd);
+    return { start: markerStart, end: following.end };
+  }
+
+  return sentenceRangeAt(input, markerStart);
+}
+
+function renderPreviewLine(line, caretOffset = null) {
+  const ranges = [];
+  const pattern = /#fix\[[^\]]*\]/g;
+  let match;
+  while ((match = pattern.exec(line))) {
+    const range = fixSentenceRangeAt(
+      line,
+      match.index,
+      match.index + match[0].length,
+    );
+    const previous = ranges.at(-1);
+    if (previous && range.start < previous.end) {
+      previous.end = Math.max(previous.end, range.end);
+    } else {
+      ranges.push(range);
+    }
+  }
+
+  const renderFragment = (start, end) => {
+    const fragment = line.slice(start, end);
+    const containsCaret =
+      caretOffset !== null &&
+      ((start === 0 && caretOffset === 0) ||
+        (caretOffset > start && caretOffset <= end));
+    return containsCaret
+      ? inlineMarkupWithCaret(fragment, caretOffset - start)
+      : inlineMarkup(stripFixMarks(fragment));
+  };
+
+  if (!ranges.length) return renderFragment(0, line.length);
+
+  const parts = [];
+  let offset = 0;
+  for (const range of ranges) {
+    parts.push(renderFragment(offset, range.start));
+    parts.push(
+      `<span class="preview-fix-sentence">${renderFragment(range.start, range.end)}</span>`,
+    );
+    offset = range.end;
+  }
+  parts.push(renderFragment(offset, line.length));
+  return parts.join("");
+}
+
+function renderPreviewLines(input, caretOffset = null) {
+  let lineStart = 0;
+  return input
+    .split("\n")
+    .map((line) => {
+      const lineEnd = lineStart + line.length;
+      const localCaret =
+        caretOffset !== null &&
+        caretOffset >= lineStart &&
+        caretOffset <= lineEnd
+          ? caretOffset - lineStart
+          : null;
+      lineStart = lineEnd + 1;
+      return renderPreviewLine(line, localCaret);
+    })
+    .join("<br>");
+}
+
 export function findFixMarks(input) {
   const marks = [];
   const pattern = /#fix\[([^\]]*)\]/g;
@@ -214,13 +290,11 @@ export function renderBody(text, caretOffset = null) {
   }
   return renderedSections
     .map(({ section, raw }, index) => {
-      const html =
-        index === activeIndex
-          ? inlineMarkupWithCaret(raw, activeLocal)
-          : inlineMarkup(stripFixMarks(raw));
-      return section.type === "chapter"
-        ? `<h2>${html}</h2>`
-        : `<p>${html.replaceAll("\n", "<br>")}</p>`;
+      const html = renderPreviewLines(
+        raw,
+        index === activeIndex ? activeLocal : null,
+      );
+      return section.type === "chapter" ? `<h2>${html}</h2>` : `<p>${html}</p>`;
     })
     .join("");
 }
@@ -229,9 +303,7 @@ export function renderPreviewDocument(text, caretOffset = null) {
   const normalized = text.replaceAll("\r\n", "\n");
   const title = normalized.split("\n")[0] || "無題";
   const titleActive = caretOffset !== null && caretOffset <= title.length;
-  const titleHtml = titleActive
-    ? inlineMarkupWithCaret(title, caretOffset)
-    : inlineMarkup(title);
+  const titleHtml = renderPreviewLine(title, titleActive ? caretOffset : null);
   return `<h1>${titleHtml}</h1>${renderBody(normalized, titleActive ? null : caretOffset)}`;
 }
 
