@@ -9,10 +9,10 @@ import {
   renderPreviewDocument,
 } from "./parser.js";
 import {
+  editorMarginWithPreview,
   previewPageBodyWidth,
   previewPageCount,
   previewPageForOffset,
-  editorMarginWithPreview,
 } from "./preview-layout.js";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor"),
@@ -28,6 +28,8 @@ let filePath = null,
   saveTimer,
   cursorFrame,
   currentPage = 0;
+let showFixHighlights =
+  localStorage.getItem("preview.showFixHighlights") !== "false";
 
 function setState(s) {
   state.textContent = s;
@@ -375,6 +377,21 @@ function toggleOutline() {
   document.querySelector("main").classList.toggle("outline-hidden");
 }
 $("previewToggle").onclick = togglePreview;
+function applyFixHighlightVisibility() {
+  const button = $("fixPreviewToggle");
+  preview.classList.toggle("show-fix-highlights", showFixHighlights);
+  button.classList.toggle("active", showFixHighlights);
+  button.setAttribute("aria-pressed", String(showFixHighlights));
+  button.title = showFixHighlights
+    ? "修正箇所の背景を非表示"
+    : "修正箇所の背景を表示";
+}
+$("fixPreviewToggle").onclick = () => {
+  showFixHighlights = !showFixHighlights;
+  localStorage.setItem("preview.showFixHighlights", String(showFixHighlights));
+  applyFixHighlightVisibility();
+};
+applyFixHighlightVisibility();
 $("pageForward").onclick = () => goToPage(currentPage + 1);
 $("pageBack").onclick = () => goToPage(currentPage - 1);
 new ResizeObserver(() => {
