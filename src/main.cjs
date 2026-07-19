@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
+const { buildDiffParts } = require("./diff-engine.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
 const {
   EMPTY_SESSION,
@@ -14,6 +15,7 @@ const {
 let win;
 let dictionaryWin;
 let splashWin;
+const diffWindows = new Set();
 let currentPath = null;
 let sessionState = { ...EMPTY_SESSION };
 let sessionWrite = Promise.resolve();
@@ -131,6 +133,28 @@ function openDictionaryWindow() {
   });
 }
 
+function openDiffWindow() {
+  const diffWin = new BrowserWindow({
+    width: 1380,
+    height: 860,
+    minWidth: 900,
+    minHeight: 600,
+    show: false,
+    title: "ファイル比較 — DRFT",
+    icon: appIcon,
+    backgroundColor: "#fdfdff",
+    webPreferences: {
+      preload: path.join(__dirname, "diff-preload.cjs"),
+      contextIsolation: true,
+    },
+  });
+  diffWin.diffDocuments = { left: null, right: null };
+  diffWindows.add(diffWin);
+  diffWin.loadFile(path.join(__dirname, "diff.html"));
+  diffWin.once("ready-to-show", () => diffWin.show());
+  diffWin.on("closed", () => diffWindows.delete(diffWin));
+}
+
 function createMenu() {
   const replaceAccelerator =
     process.platform === "darwin" ? "Cmd+Alt+F" : "Ctrl+H";
@@ -240,6 +264,15 @@ function createMenu() {
         },
         { type: "separator" },
         { role: "togglefullscreen", label: "フルスクリーン" },
+      ],
+    },
+    {
+      label: "ツール",
+      submenu: [
+        {
+          label: "ファイルを比較…",
+          click: openDiffWindow,
+        },
       ],
     },
     {
@@ -395,4 +428,52 @@ ipcMain.handle("file:exportPdf", async (_e, html) => {
   await fs.writeFile(r.filePath, await imposeRightBoundSpreads(data));
   pdfWin.destroy();
   return r.filePath;
+});
+
+function diffWindowState(diffWin) {
+  const documents = diffWin?.diffDocuments;
+  if (!documents) throw new Error("比較ウィンドウを読み込めません");
+  const fileInfo = (document) =>
+    document
+      ? {
+          name: path.basename(document.path),
+          path: document.path,
+          encoding: document.encoding,
+        }
+      : null;
+  return {
+    left: fileInfo(documents.left),
+    right: fileInfo(documents.right),
+    parts:
+      documents.left && documents.right
+        ? buildDiffParts(documents.left.text, documents.right.text)
+        : null,
+  };
+}
+
+ipcMain.handle("diff:load", (event) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  return diffWindowState(diffWin);
+});
+
+ipcMain.handle("diff:choose", async (event, side) => {
+  if (side !== "left" && side !== "right") {
+    throw new Error("比較する側を選択できません");
+  }
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  if (!diffWin?.diffDocuments) {
+    throw new Error("比較ウィンドウを読み込めません");
+  }
+  const result = await dialog.showOpenDialog(diffWin, {
+    title: `${side === "left" ? "古い" : "新しい"}ファイルを選択`,
+    properties: ["openFile"],
+    filters: [{ name: "テキスト", extensions: ["txt"] }],
+  });
+  if (result.canceled) return null;
+  const file = result.filePaths[0];
+  diffWin.diffDocuments[side] = {
+    path: file,
+    ...decodeText(await fs.readFile(file)),
+  };
+  return diffWindowState(diffWin);
 });
