@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ファイル比較 — DRFT</title>
+    <link rel="stylesheet" href="diff.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <button class="file-label" id="leftFile" type="button">
+        古いファイルを選択…
+      </button>
+      <nav class="change-nav" aria-label="変更箇所の移動">
+        <button id="previousChange" type="button" title="前の変更箇所">
+          ‹
+        </button>
+        <span id="changeCount">— / —</span>
+        <button id="nextChange" type="button" title="次の変更箇所">›</button>
+      </nav>
+      <button class="file-label right" id="rightFile" type="button">
+        新しいファイルを選択…
+      </button>
+    </header>
+    <main class="comparison">
+      <pre class="document" id="leftDocument" tabindex="0"></pre>
+      <pre class="document" id="rightDocument" tabindex="0"></pre>
+    </main>
+    <footer class="statusbar">
+      <span id="leftPath"></span>
+      <span id="status">古いファイルと新しいファイルを選択してください</span>
+      <span id="rightPath"></span>
+    </footer>
+    <script type="module" src="diff-renderer.js"></script>
+  </body>
+</html>
