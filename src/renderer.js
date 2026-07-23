@@ -14,6 +14,7 @@ import {
   previewPageCount,
   previewPageForOffset,
 } from "./preview-layout.js";
+import { buildEpubBook } from "./epub.js";
 const $ = (id) => document.getElementById(id);
 const editor = $("editor"),
   preview = $("preview"),
@@ -528,6 +529,12 @@ async function exportPdf() {
   if (p) setState(`PDF出力済み — ${p}`);
 }
 
+async function exportEpub() {
+  const book = buildEpubBook(editor.value);
+  const exportedPath = await window.desktop.exportEpub(book);
+  if (exportedPath) setState(`EPUB出力済み — ${exportedPath}`);
+}
+
 window.desktop.onMenuCommand((command) => {
   if (typeof command === "object" && command.type === "dictionary-find") {
     findDictionaryHeading(command.heading);
@@ -540,6 +547,7 @@ window.desktop.onMenuCommand((command) => {
     "save-as": saveDocumentAs,
     snapshot: saveSnapshot,
     pdf: exportPdf,
+    epub: exportEpub,
     find: () => openFindDialog(false),
     replace: () => openFindDialog(true),
     "toggle-outline": toggleOutline,
