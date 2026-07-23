@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
+const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts } = require("./diff-engine.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
@@ -207,9 +208,18 @@ function createMenu() {
         },
         { type: "separator" },
         {
-          label: "PDF出力…",
-          accelerator: "CmdOrCtrl+Shift+P",
-          click: () => sendMenuCommand("pdf"),
+          label: "エクスポート",
+          submenu: [
+            {
+              label: "PDF出力…",
+              accelerator: "CmdOrCtrl+Shift+P",
+              click: () => sendMenuCommand("pdf"),
+            },
+            {
+              label: "EPUB出力…",
+              click: () => sendMenuCommand("epub"),
+            },
+          ],
         },
         ...(process.platform === "darwin"
           ? [{ type: "separator" }, { role: "close" }]
@@ -428,6 +438,24 @@ ipcMain.handle("file:exportPdf", async (_e, html) => {
   await fs.writeFile(r.filePath, await imposeRightBoundSpreads(data));
   pdfWin.destroy();
   return r.filePath;
+});
+
+ipcMain.handle("file:exportEpub", async (_event, book) => {
+  if (!book || typeof book.title !== "string") {
+    throw new Error("EPUBの書誌情報を作成できません");
+  }
+  const safeTitle =
+    book.title.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_").trim() || "無題";
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath: `${safeTitle}.epub`,
+    filters: [{ name: "EPUB", extensions: ["epub"] }],
+  });
+  if (result.canceled) return null;
+  const file = result.filePath.toLowerCase().endsWith(".epub")
+    ? result.filePath
+    : `${result.filePath}.epub`;
+  await fs.writeFile(file, await createEpubArchive(book.files));
+  return file;
 });
 
 function diffWindowState(diffWin) {

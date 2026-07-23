@@ -44,6 +44,7 @@
   "dependencies": {
     "diff": "^8.0.4",
     "iconv-lite": "^0.7.3",
+    "jszip": "^3.10.1",
     "pdf-lib": "^1.17.1"
   }
 }
