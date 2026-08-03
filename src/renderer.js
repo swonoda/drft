@@ -539,6 +539,13 @@ async function adjustLayoutFromPdf() {
   try {
     const result = await window.desktop.analyzePdfLayout();
     if (!result) return;
+    const confidence = result.confidence === "high" ? "自動判定" : "要確認";
+    const message =
+      `ゲラの組版を判定しました。\\n\\n${result.charactersPerLine}字 × ${result.linesPerPage}行（${confidence}）\\n\\n表示設定へ反映しますか？`;
+    if (!window.confirm(message)) {
+      setState(`組版を確認 — ${result.charactersPerLine}字 × ${result.linesPerPage}行`);
+      return;
+    }
     const lineChars = $("lineChars");
     const previewLines = $("previewLines");
     lineChars.value = result.charactersPerLine;
@@ -546,8 +553,7 @@ async function adjustLayoutFromPdf() {
     lineChars.dispatchEvent(new Event("input", { bubbles: true }));
     previewLines.dispatchEvent(new Event("input", { bubbles: true }));
     openSettings();
-    const confidence = result.confidence === "high" ? "自動判定" : "要確認";
-    setState(`組版を反映 — ${result.charactersPerLine}字 × ${result.linesPerPage}行（${confidence}）`);
+    setState(`組版を反映 — ${result.charactersPerLine}字 × ${result.linesPerPage}行`);
   } catch (error) {
     window.alert(error.message || "PDFの組版を読み取れませんでした。");
   }

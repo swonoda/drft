@@ -1,13 +1,21 @@
 const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
+const zlib = require("node:zlib");
 
 function decodeStream(stream) {
   if (!stream) return "";
-  if (typeof stream.getContentsString === "function") {
-    return stream.getContentsString();
-  }
   const bytes =
     typeof stream.getContents === "function" ? stream.getContents() : stream.contents;
-  return bytes ? Buffer.from(bytes).toString("latin1") : "";
+  if (!bytes) return "";
+  const buffer = Buffer.from(bytes);
+  let text = buffer.toString("latin1");
+  if (!/\\bBT\\b/.test(text) && stream.dict?.get(PDFName.of("Filter"))) {
+    try {
+      text = zlib.inflateSync(buffer).toString("latin1");
+    } catch {
+      // Some PDF filters are already decoded by pdf-lib.
+    }
+  }
+  return text;
 }
 
 function pageContent(pdf, page) {
