@@ -5,6 +5,7 @@ const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts } = require("./diff-engine.cjs");
+const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
 const {
   EMPTY_SESSION,
@@ -283,6 +284,10 @@ function createMenu() {
           label: "ファイルを比較…",
           click: openDiffWindow,
         },
+        {
+          label: "組版を調整…",
+          click: () => sendMenuCommand("adjust-layout"),
+        },
       ],
     },
     {
@@ -478,6 +483,17 @@ function diffWindowState(diffWin) {
         : null,
   };
 }
+
+ipcMain.handle("file:analyzePdf", async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: "組版を調整するゲラPDFを選択",
+    properties: ["openFile"],
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (result.canceled) return null;
+  const file = result.filePaths[0];
+  return { path: file, ...(await analyzePdfLayout(await fs.readFile(file))) };
+});
 
 ipcMain.handle("diff:load", (event) => {
   const diffWin = BrowserWindow.fromWebContents(event.sender);

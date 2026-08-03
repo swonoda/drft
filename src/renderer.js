@@ -535,6 +535,24 @@ async function exportEpub() {
   if (exportedPath) setState(`EPUB出力済み — ${exportedPath}`);
 }
 
+async function adjustLayoutFromPdf() {
+  try {
+    const result = await window.desktop.analyzePdfLayout();
+    if (!result) return;
+    const lineChars = $("lineChars");
+    const previewLines = $("previewLines");
+    lineChars.value = result.charactersPerLine;
+    previewLines.value = result.linesPerPage;
+    lineChars.dispatchEvent(new Event("input", { bubbles: true }));
+    previewLines.dispatchEvent(new Event("input", { bubbles: true }));
+    openSettings();
+    const confidence = result.confidence === "high" ? "自動判定" : "要確認";
+    setState(`組版を反映 — ${result.charactersPerLine}字 × ${result.linesPerPage}行（${confidence}）`);
+  } catch (error) {
+    window.alert(error.message || "PDFの組版を読み取れませんでした。");
+  }
+}
+
 window.desktop.onMenuCommand((command) => {
   if (typeof command === "object" && command.type === "dictionary-find") {
     findDictionaryHeading(command.heading);
@@ -548,6 +566,7 @@ window.desktop.onMenuCommand((command) => {
     snapshot: saveSnapshot,
     pdf: exportPdf,
     epub: exportEpub,
+    "adjust-layout": adjustLayoutFromPdf,
     find: () => openFindDialog(false),
     replace: () => openFindDialog(true),
     "toggle-outline": toggleOutline,
