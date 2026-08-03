@@ -446,6 +446,22 @@ $("replaceAll").onclick = () => {
 function openSettings() {
   if (!$("settingsDialog").open) $("settingsDialog").showModal();
 }
+
+async function adjustLayoutFromPdf() {
+  try {
+    const result = await window.desktop.analyzePdfLayout();
+    if (!result) return;
+    const message = `ゲラの本文領域から ${result.charactersPerLine}字 × ${result.linesPerPage}行と推定しました。\\n\\n表示設定へ反映しますか？`;
+    if (!window.confirm(message)) return;
+    $("lineChars").value = result.charactersPerLine;
+    $("lineChars").dispatchEvent(new Event("input", { bubbles: true }));
+    $("previewLines").value = result.linesPerPage;
+    $("previewLines").dispatchEvent(new Event("input", { bubbles: true }));
+    openSettings();
+  } catch (error) {
+    window.alert(error?.message || "PDFの組版を読み取れませんでした。");
+  }
+}
 const displaySettings = [
   ["font", "--font", ""],
   ["fontSize", "--size", "px"],
@@ -553,6 +569,7 @@ window.desktop.onMenuCommand((command) => {
     "toggle-outline": toggleOutline,
     "toggle-preview": togglePreview,
     settings: openSettings,
+    "adjust-layout": adjustLayoutFromPdf,
   };
   actions[command]?.();
 });

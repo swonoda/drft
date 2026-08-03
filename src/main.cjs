@@ -5,6 +5,7 @@ const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts } = require("./diff-engine.cjs");
+const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
 const {
   EMPTY_SESSION,
@@ -283,6 +284,10 @@ function createMenu() {
           label: "ファイルを比較…",
           click: openDiffWindow,
         },
+        {
+          label: "組版を調整…",
+          click: () => sendMenuCommand("adjust-layout"),
+        },
       ],
     },
     {
@@ -312,6 +317,16 @@ app.on("before-quit", () => {
 });
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+ipcMain.handle("file:analyzePdf", async () => {
+  const result = await dialog.showOpenDialog(win, {
+    title: "ゲラPDFを選択",
+    properties: ["openFile"],
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  if (result.canceled) return null;
+  return { path: result.filePaths[0], ...(await analyzePdfLayout(result.filePaths[0])) };
 });
 
 ipcMain.handle("file:open", async () => {

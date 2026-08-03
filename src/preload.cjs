@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("desktop", {
   openDictionary: () => ipcRenderer.invoke("dictionary:open"),
   onMenuCommand: (callback) =>
     ipcRenderer.on("menu:command", (_event, command) => callback(command)),
+  analyzePdfLayout: () => ipcRenderer.invoke("file:analyzePdf"),
 });
