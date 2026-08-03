@@ -7,16 +7,54 @@ const { promisify } = require("node:util");
 const execFileAsync = promisify(execFile);
 
 async function resolvePdfToPpm() {
+  let npmPdftoppm = null;
+
+  if (process.platform === "win32") {
+    try {
+      const popplerDir = require("node-poppler-win32");
+      console.log(popplerDir);
+      npmPdftoppm = path.join(popplerDir, "pdftoppm.exe");
+      console.log(npmPdftoppm);
+    } catch (error) {
+      console.warn("node-poppler-win32の読み込みに失敗しました:", error);
+    }
+  }
+
   const candidates = [
     process.env.PDFTOPPM,
-    path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "bin", "override", process.platform === "win32" ? "pdftoppm.cmd" : "pdftoppm"),
+    npmPdftoppm,
+
+    path.join(
+      os.homedir(),
+      ".cache",
+      "codex-runtimes",
+      "codex-primary-runtime",
+      "dependencies",
+      "bin",
+      "override",
+      process.platform === "win32" ? "pdftoppm.cmd" : "pdftoppm",
+    ),
     "pdftoppm",
   ].filter(Boolean);
   for (const candidate of candidates) {
     if (candidate === "pdftoppm") {
-      try { await execFileAsync(process.platform === "win32" ? "where.exe" : "which", [candidate], { windowsHide: true }); return candidate; } catch { continue; }
+      try {
+        await execFileAsync(
+          process.platform === "win32" ? "where.exe" : "which",
+          [candidate],
+          { windowsHide: true },
+        );
+        return candidate;
+      } catch {
+        continue;
+      }
     }
-    try { await fs.access(candidate); return candidate; } catch { /* try next candidate */ }
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch {
+      /* try next candidate */
+    }
   }
   throw new Error("PDFを画像化するためのpdftoppmが見つかりません。");
 }
@@ -27,8 +65,23 @@ async function renderPage(pdfPath) {
   const prefix = path.join(dir, "page");
   try {
     const command = await resolvePdfToPpm();
-    await execFileAsync(command, ["-f", "1", "-l", "1", "-r", "150", "-mono", "-pbm", pdfPath, prefix], { windowsHide: true, shell: command.endsWith(".cmd") });
-    const file = `${prefix}-1.pbm`;
+    await execFileAsync(
+      command,
+      [
+        "-f",
+        "1",
+        "-l",
+        "1",
+        "-singlefile",
+        "-r",
+        "150",
+        "-mono",
+        pdfPath,
+        prefix,
+      ],
+      { windowsHide: true, shell: command.endsWith(".cmd") },
+    );
+    const file = `${prefix}.pbm`;
     return parsePbm(await fs.readFile(file));
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
@@ -38,20 +91,36 @@ async function renderPage(pdfPath) {
 function parsePbm(buffer) {
   let offset = 0;
   const nextToken = () => {
-    while (offset < buffer.length && /\\s/.test(String.fromCharCode(buffer[offset]))) offset += 1;
+    console.log(buffer);
+    while (
+      offset < buffer.length &&
+      /\s/.test(String.fromCharCode(buffer[offset]))
+    )
+      offset += 1;
+    console.log(offset);
     if (buffer[offset] === 35) {
       while (offset < buffer.length && buffer[offset] !== 10) offset += 1;
       return nextToken();
     }
     const start = offset;
-    while (offset < buffer.length && !/\\s/.test(String.fromCharCode(buffer[offset]))) offset += 1;
+    console.log(start);
+    while (
+      offset < buffer.length &&
+      !/\s/.test(String.fromCharCode(buffer[offset]))
+    )
+      offset += 1;
     return buffer.subarray(start, offset).toString("ascii");
   };
   if (nextToken() !== "P4") throw new Error(PDF_LAYOUT_ERROR);
   const width = Number(nextToken());
   const height = Number(nextToken());
-  while (offset < buffer.length && /\\s/.test(String.fromCharCode(buffer[offset]))) offset += 1;
+  while (
+    offset < buffer.length &&
+    /\s/.test(String.fromCharCode(buffer[offset]))
+  )
+    offset += 1;
   const rowBytes = Math.ceil(width / 8);
+  console.log(`width:${width}, height: ${height}`);
   return { width, height, rowBytes, data: buffer.subarray(offset) };
 }
 
@@ -63,15 +132,25 @@ function projection(image, axis, start, end) {
   const values = [];
   for (let i = start; i < end; i += 1) {
     let count = 0;
-    if (axis === "x") for (let y = 0; y < image.height; y += 1) count += isInk(image, i, y) ? 1 : 0;
-    else for (let x = 0; x < image.width; x += 1) count += isInk(image, x, i) ? 1 : 0;
+    if (axis === "x")
+      for (let y = 0; y < image.height; y += 1)
+        count += isInk(image, i, y) ? 1 : 0;
+    else
+      for (let x = 0; x < image.width; x += 1)
+        count += isInk(image, x, i) ? 1 : 0;
     values.push(count);
   }
   return values;
 }
 
 function denseSpan(values, minimum) {
-  const threshold = Math.max(2, Math.round(values.reduce((a, b) => a + b, 0) / Math.max(1, values.length) * 0.18), minimum);
+  const threshold = Math.max(
+    2,
+    Math.round(
+      (values.reduce((a, b) => a + b, 0) / Math.max(1, values.length)) * 0.18,
+    ),
+    minimum,
+  );
   const active = values.map((value) => value >= threshold);
   const spans = [];
   let start = -1;
@@ -83,7 +162,48 @@ function denseSpan(values, minimum) {
       start = -1;
     }
   });
-  return spans.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0] || { start: 0, end: values.length };
+  return (
+    spans.sort((a, b) => b.end - b.start - (a.end - a.start))[0] || {
+      start: 0,
+      end: values.length,
+    }
+  );
+}
+
+function clusteredSpan(values, minimum, maxGap) {
+  const threshold = Math.max(
+    2,
+    Math.round(
+      (values.reduce((a, b) => a + b, 0) / Math.max(1, values.length)) * 0.18,
+    ),
+    minimum,
+  );
+
+  const rawSpans = segments(values, threshold).filter(
+    ({ start, end }) => end - start > 4,
+  );
+
+  if (!rawSpans.length) {
+    return { start: 0, end: values.length };
+  }
+
+  const clusters = [];
+  let current = { ...rawSpans[0] };
+
+  for (const span of rawSpans.slice(1)) {
+    const gap = span.start - current.end;
+
+    if (gap <= maxGap) {
+      current.end = span.end;
+    } else {
+      clusters.push(current);
+      current = { ...span };
+    }
+  }
+
+  clusters.push(current);
+
+  return clusters.sort((a, b) => b.end - b.start - (a.end - a.start))[0];
 }
 
 function segments(values, threshold) {
@@ -92,7 +212,8 @@ function segments(values, threshold) {
   values.forEach((value, index) => {
     if (value >= threshold && start < 0) start = index;
     if ((value < threshold || index === values.length - 1) && start >= 0) {
-      const end = value >= threshold && index === values.length - 1 ? index + 1 : index;
+      const end =
+        value >= threshold && index === values.length - 1 ? index + 1 : index;
       if (end > start) result.push({ start, end });
       start = -1;
     }
@@ -103,20 +224,42 @@ function segments(values, threshold) {
 function estimateHalf(image, left, right) {
   const xValues = projection(image, "x", left, right);
   const yValues = projection(image, "y", 0, image.height);
-  const xSpan = denseSpan(xValues, Math.max(3, Math.round(image.height * 0.015)));
-  const ySpan = denseSpan(yValues, Math.max(3, Math.round((right - left) * 0.01)));
+  const xSpan = clusteredSpan(
+    xValues,
+    Math.max(3, Math.round(image.height * 0.015)),
+    Math.round((right - left) * 0.06),
+  );
+
+  const ySpan = clusteredSpan(
+    yValues,
+    Math.max(3, Math.round((right - left) * 0.01)),
+    Math.round(image.height * 0.015),
+  );
   const bodyLeft = left + xSpan.start;
   const bodyRight = left + xSpan.end;
   const bodyTop = ySpan.start;
   const bodyBottom = ySpan.end;
   const bodyWidth = bodyRight - bodyLeft;
   const bodyHeight = bodyBottom - bodyTop;
+  console.log(`bodyWidth: ${bodyWidth}, bodyHeight: ${bodyHeight}`);
   if (bodyWidth < 30 || bodyHeight < 30) throw new Error(PDF_LAYOUT_ERROR);
 
-  const lineSegments = segments(xValues.slice(xSpan.start, xSpan.end), Math.max(2, Math.round(image.height * 0.01)));
-  const rowSegments = segments(yValues.slice(ySpan.start, ySpan.end), Math.max(2, Math.round(bodyWidth * 0.01)));
-  const linePitch = medianAdvance(lineSegments, bodyWidth / Math.max(1, lineSegments.length));
-  const charPitch = medianAdvance(rowSegments, bodyHeight / Math.max(1, rowSegments.length));
+  const lineSegments = segments(
+    xValues.slice(xSpan.start, xSpan.end),
+    Math.max(2, Math.round(image.height * 0.01)),
+  );
+  const rowSegments = segments(
+    yValues.slice(ySpan.start, ySpan.end),
+    Math.max(2, Math.round(bodyWidth * 0.01)),
+  );
+  const linePitch = medianAdvance(
+    lineSegments,
+    bodyWidth / Math.max(1, lineSegments.length),
+  );
+  const charPitch = medianAdvance(
+    rowSegments,
+    bodyHeight / Math.max(1, rowSegments.length),
+  );
   const linesPerPage = clamp(bodyWidth / linePitch, 8, 40);
   const charactersPerLine = clamp(bodyHeight / charPitch, 10, 80);
   return { linesPerPage, charactersPerLine };
@@ -124,7 +267,9 @@ function estimateHalf(image, left, right) {
 
 function medianAdvance(spans, fallback) {
   if (spans.length < 2) return fallback;
-  const advances = spans.slice(1).map((span, index) => span.start - spans[index].start);
+  const advances = spans
+    .slice(1)
+    .map((span, index) => span.start - spans[index].start);
   const sorted = advances.filter((value) => value > 0).sort((a, b) => a - b);
   return sorted.length ? sorted[Math.floor(sorted.length / 2)] : fallback;
 }
@@ -136,8 +281,15 @@ function clamp(value, min, max) {
 async function analyzePdfLayout(pdfPath) {
   const image = await renderPage(pdfPath);
   const spread = image.width / image.height > 1.25;
-  const halves = spread ? [[0, Math.floor(image.width / 2)], [Math.floor(image.width / 2), image.width]] : [[0, image.width]];
-  const estimates = halves.map(([left, right]) => estimateHalf(image, left, right));
+  const halves = spread
+    ? [
+        [0, Math.floor(image.width / 2)],
+        [Math.floor(image.width / 2), image.width],
+      ]
+    : [[0, image.width]];
+  const estimates = halves.map(([left, right]) =>
+    estimateHalf(image, left, right),
+  );
   return {
     pagesAnalyzed: 1,
     charactersPerLine: mode(estimates.map((item) => item.charactersPerLine)),
