@@ -1,5 +1,6 @@
 const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
 const zlib = require("node:zlib");
+const PDF_LAYOUT_ERROR = "PDF\\u304b\\u3089\\u672c\\u6587\\u306e\\u6587\\u5b57\\u914d\\u7f6e\\u3092\\u8aad\\u307f\\u53d6\\u308c\\u307e\\u305b\\u3093\\u3067\\u3057\\u305f\\u3002";
 
 function decodeStream(stream) {
   if (!stream) return "";
@@ -74,7 +75,7 @@ function clamp(value, min, max) { return Math.max(min, Math.min(max, Math.round(
 
 function estimateLayout(runs, pageWidth, pageHeight) {
   const candidates = runs.filter((run) => run.chars >= 8);
-  if (!candidates.length) throw new Error("PDFã‹ã‚‰æœ¬æ–‡ã®æ–‡å­—é…ç½®ã‚’èª­ã¿å–ã‚Œã¾ã›ã‚“ã§ã—ãŸã€‚");
+  if (!candidates.length) throw new Error(PDF_LAYOUT_ERROR);
   const spread = pageWidth / pageHeight > 1.25;
   const pages = spread
     ? [candidates.filter((run) => run.x < pageWidth / 2), candidates.filter((run) => run.x >= pageWidth / 2)]
@@ -91,7 +92,7 @@ function estimateLayout(runs, pageWidth, pageHeight) {
       : mode(pageRuns.map((run) => run.chars));
     return { lineCount, charactersPerLine };
   });
-  if (!pageEstimates.length) throw new Error("PDFã‹ã‚‰æœ¬æ–‡ã®æ–‡å­—é…ç½®ã‚’èª­ã¿å–ã‚Œã¾ã›ã‚“ã§ã—ãŸã€‚");
+  if (!pageEstimates.length) throw new Error(PDF_LAYOUT_ERROR);
   if (spread && pageEstimates.length === 1) pageEstimates[0].lineCount = Math.round(pageEstimates[0].lineCount / 2);
   return {
     charactersPerLine: clamp(mode(pageEstimates.map((page) => page.charactersPerLine)), 10, 80),
