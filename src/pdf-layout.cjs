@@ -4,14 +4,14 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 
-const execFileAsync = promisify(execFile);
+const execFileAsync = promisify(execFile);\n\nasync function resolvePdfToPpm() {\n  const candidates = [\n    process.env.PDFTOPPM,\n    path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "bin", "override", process.platform === "win32" ? "pdftoppm.cmd" : "pdftoppm"),\n    "pdftoppm",\n  ].filter(Boolean);\n  for (const candidate of candidates) {\n    if (candidate === "pdftoppm") {\n      try { await execFileAsync(process.platform === "win32" ? "where.exe" : "which", [candidate], { windowsHide: true }); return candidate; } catch { continue; }\n    }\n    try { await fs.access(candidate); return candidate; } catch { /* try next candidate */ }\n  }\n  throw new Error("PDFを画像化するためのpdftoppmが見つかりません。");\n}
 const PDF_LAYOUT_ERROR = "PDFから本文領域を検出できませんでした。";
 
 async function renderPage(pdfPath) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "drft-pdf-"));
   const prefix = path.join(dir, "page");
   try {
-    const command = process.env.PDFTOPPM || "pdftoppm";
+    const command = await resolvePdfToPpm();
     await execFileAsync(command, ["-f", "1", "-l", "1", "-r", "150", "-mono", "-pbm", pdfPath, prefix], { windowsHide: true });
     const file = `${prefix}-1.pbm`;
     return parsePbm(await fs.readFile(file));
