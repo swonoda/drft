@@ -24,20 +24,20 @@ function literalGlyphCount(literal) {
 
 function textTokenCount(block) {
   let count = 0;
-  for (const match of block.matchAll(/<([0-9a-f]+)>\\s*Tj/gi)) count += hexGlyphCount(match[1]);
-  for (const match of block.matchAll(/\\(((?:\\\\.|[^)])*)\\)\\s*Tj/g)) count += literalGlyphCount(match[1]);
-  for (const match of block.matchAll(/\\[([\\s\\S]*?)\\]\\s*TJ/g)) {
+  for (const match of block.matchAll(/<([0-9a-f]+)>\s*Tj/gi)) count += hexGlyphCount(match[1]);
+  for (const match of block.matchAll(/\(((?:\\.|[^)])*)\)\s*Tj/g)) count += literalGlyphCount(match[1]);
+  for (const match of block.matchAll(/\[([\s\S]*?)\]\s*TJ/g)) {
     for (const hex of match[1].matchAll(/<([0-9a-f]+)>/gi)) count += hexGlyphCount(hex[1]);
-    for (const literal of match[1].matchAll(/\\(((?:\\\\.|[^)])*)\\)/g)) count += literalGlyphCount(literal[1]);
+    for (const literal of match[1].matchAll(/\(((?:\\.|[^)])*)\)/g)) count += literalGlyphCount(literal[1]);
   }
   return count;
 }
 
 function parseTextRuns(content) {
   const runs = [];
-  for (const block of content.matchAll(/BT([\\s\\S]*?)ET/g)) {
+  for (const block of content.matchAll(/BT([\s\S]*?)ET/g)) {
     const body = block[1];
-    const matrix = body.match(/(-?[\\d.]+)\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+-?[\\d.]+\\s+(-?[\\d.]+)\\s+(-?[\\d.]+)\\s+Tm/);
+    const matrix = body.match(/(-?[\d.]+)\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm/);
     const chars = textTokenCount(body);
     if (!matrix || chars === 0) continue;
     runs.push({ chars, x: Number(matrix[2]), y: Number(matrix[3]) });
