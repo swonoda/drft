@@ -7,10 +7,15 @@ function decodeStream(stream) {
 }
 
 function pageContent(pdf, page) {
-  const contents = page.node.get(PDFName.of("Contents"));
+  const contents =
+    typeof page.node.Contents === "function"
+      ? page.node.Contents()
+      : page.node.get(PDFName.of("Contents"));
   if (!contents) return "";
   const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
-  return refs.map((ref) => decodeStream(pdf.context.lookup(ref))).join("\n");
+  return refs
+    .map((ref) => decodeStream(pdf.context.lookup(ref)))
+    .join("\n");
 }
 
 function hexGlyphCount(hex) {
