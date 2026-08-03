@@ -27,7 +27,7 @@ async function renderPage(pdfPath) {
   const prefix = path.join(dir, "page");
   try {
     const command = await resolvePdfToPpm();
-    await execFileAsync(command, ["-f", "1", "-l", "1", "-r", "150", "-mono", "-pbm", pdfPath, prefix], { windowsHide: true });
+    await execFileAsync(command, ["-f", "1", "-l", "1", "-r", "150", "-mono", "-pbm", pdfPath, prefix], { windowsHide: true, shell: command.endsWith(".cmd") });
     const file = `${prefix}-1.pbm`;
     return parsePbm(await fs.readFile(file));
   } finally {
