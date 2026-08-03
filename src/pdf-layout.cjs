@@ -8,7 +8,7 @@ function decodeStream(stream) {
   if (!bytes) return "";
   const buffer = Buffer.from(bytes);
   let text = buffer.toString("latin1");
-  if (!/\\bBT\\b/.test(text) && stream.dict?.get(PDFName.of("Filter"))) {
+  if (!/\bBT\b/.test(text) && stream.dict?.get(PDFName.of("Filter"))) {
     try {
       text = zlib.inflateSync(buffer).toString("latin1");
     } catch {
