@@ -1,43 +1,27 @@
-const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
+�r�^�f��ئ{M�y�'vî���const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
 const zlib = require("node:zlib");
 
 function decodeStream(stream) {
   if (!stream) return "";
-  const bytes =
-    typeof stream.getContents === "function" ? stream.getContents() : stream.contents;
+  const bytes = typeof stream.getContents === "function" ? stream.getContents() : stream.contents;
   if (!bytes) return "";
   const buffer = Buffer.from(bytes);
   let text = buffer.toString("latin1");
   if (!/\bBT\b/.test(text) && stream.dict?.get(PDFName.of("Filter"))) {
-    try {
-      text = zlib.inflateSync(buffer).toString("latin1");
-    } catch {
-      // Some PDF filters are already decoded by pdf-lib.
-    }
+    try { text = zlib.inflateSync(buffer).toString("latin1"); } catch { /* already decoded */ }
   }
   return text;
 }
 
 function pageContent(pdf, page) {
-  const contents =
-    typeof page.node.Contents === "function"
-      ? page.node.Contents()
-      : page.node.get(PDFName.of("Contents"));
+  const contents = typeof page.node.Contents === "function" ? page.node.Contents() : page.node.get(PDFName.of("Contents"));
   if (!contents) return "";
   const refs = contents instanceof PDFArray ? contents.asArray() : [contents];
-  return refs
-    .map((ref) => decodeStream(pdf.context.lookup(ref)))
-    .join("\n");
+  return refs.map((ref) => decodeStream(pdf.context.lookup(ref))).join("\n");
 }
 
-function hexGlyphCount(hex) {
-  if (!hex) return 0;
-  return hex.length % 4 === 0 ? hex.length / 4 : Math.ceil(hex.length / 2);
-}
-
-function literalGlyphCount(literal) {
-  return literal.replace(/\\(?:[0-7]{1,3}|.)/g, "x").length;
-}
+function hexGlyphCount(hex) { return hex ? (hex.length % 4 === 0 ? hex.length / 4 : Math.ceil(hex.length / 2)) : 0; }
+function literalGlyphCount(literal) { return literal.replace(/\\(?:[0-7]{1,3}|.)/g, "x").length; }
 
 function textTokenCount(block) {
   let count = 0;
@@ -54,10 +38,16 @@ function parseTextRuns(content) {
   const runs = [];
   for (const block of content.matchAll(/BT([\s\S]*?)ET/g)) {
     const body = block[1];
-    const matrix = body.match(/(-?[\d.]+)\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm/);
+    const matrix = body.match(/(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)\s+Tm/);
     const chars = textTokenCount(body);
     if (!matrix || chars === 0) continue;
-    runs.push({ chars, x: Number(matrix[2]), y: Number(matrix[3]) });
+    runs.push({
+      chars,
+      x: Number(matrix[5]),
+      y: Number(matrix[6]),
+      xScale: Math.hypot(Number(matrix[1]), Number(matrix[2])),
+      yScale: Math.hypot(Number(matrix[3]), Number(matrix[4])),
+    });
   }
   return runs;
 }
@@ -68,21 +58,46 @@ function mode(values) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] || 0;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, Math.round(value)));
+function median(values) {
+  const sorted = values.filter((value) => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function coordinateSpacing(values) {
+  const sorted = [...new Set(values.map((value) => Math.round(value * 100) / 100))].sort((a, b) => a - b);
+  return median(sorted.slice(1).map((value, index) => value - sorted[index]));
+}
+
+function clamp(value, min, max) { return Math.max(min, Math.min(max, Math.round(value))); }
+
 function estimateLayout(runs, pageWidth, pageHeight) {
-  const candidates = runs.map((run) => run.chars).filter((chars) => chars >= 8);
+  const candidates = runs.filter((run) => run.chars >= 8);
   if (!candidates.length) throw new Error("PDFから本文の文字配置を読み取れませんでした。");
-  const charactersPerLine = mode(candidates);
-  const completeLines = candidates.filter((chars) => chars >= Math.max(8, charactersPerLine * 0.78)).length;
   const spread = pageWidth / pageHeight > 1.25;
+  const pages = spread
+    ? [candidates.filter((run) => run.x < pageWidth / 2), candidates.filter((run) => run.x >= pageWidth / 2)]
+    : [candidates];
+  const pageEstimates = pages.filter((pageRuns) => pageRuns.length).map((pageRuns) => {
+    const linePitch = coordinateSpacing(pageRuns.map((run) => run.x)) || median(pageRuns.map((run) => run.xScale));
+    const ySpacing = coordinateSpacing(pageRuns.map((run) => run.y));
+    const charPitch = ySpacing || median(pageRuns.map((run) => run.yScale).filter((value) => value > 1.5));
+    const linePositions = pageRuns.map((run) => run.x);
+    const lineSpan = Math.max(...linePositions) - Math.min(...linePositions);
+    const lineCount = linePitch ? Math.round(lineSpan / linePitch) + 1 : pageRuns.length;
+    const charactersPerLine = charPitch
+      ? Math.round((Math.max(...pageRuns.map((run) => run.y)) - Math.min(...pageRuns.map((run) => run.y - (run.chars - 1) * charPitch))) / charPitch) + 1
+      : mode(pageRuns.map((run) => run.chars));
+    return { lineCount, charactersPerLine };
+  });
+  if (!pageEstimates.length) throw new Error("PDFから本文の文字配置を読み取れませんでした。");
+  if (spread && pageEstimates.length === 1) pageEstimates[0].lineCount = Math.round(pageEstimates[0].lineCount / 2);
   return {
-    charactersPerLine: clamp(charactersPerLine, 10, 80),
-    linesPerPage: clamp(completeLines / (spread ? 2 : 1), 8, 30),
+    charactersPerLine: clamp(mode(pageEstimates.map((page) => page.charactersPerLine)), 10, 80),
+    linesPerPage: clamp(mode(pageEstimates.map((page) => page.lineCount)), 8, 30),
     spread,
-    confidence: candidates.length >= 8 ? "high" : "low",
+    confidence: candidates.length >= 8 && pageEstimates.every((page) => page.lineCount >= 8) ? "high" : "low",
   };
 }
 

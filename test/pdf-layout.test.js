@@ -1,5 +1,7 @@
-import test from "node:test";
+�r�^�f��ئ{M�y�'vî���import test from "node:test";
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
 const { estimateLayout, parseTextRuns, textTokenCount } = require("../src/pdf-layout.cjs");
 
 test("PDFの縦書きテキストランから字数と行数を推定する", () => {
@@ -10,7 +12,7 @@ test("PDFの縦書きテキストランから字数と行数を推定する", ()
   assert.equal(runs.length, 12);
   assert.equal(textTokenCount("<001200170014> Tj"), 3);
   assert.deepEqual(estimateLayout(runs, 420, 700), {
-    charactersPerLine: 20,
+    charactersPerLine: 24,
     linesPerPage: 12,
     spread: false,
     confidence: "high",
