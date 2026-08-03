@@ -87,9 +87,11 @@ function estimateLayout(runs, pageWidth, pageHeight) {
     const linePositions = pageRuns.map((run) => run.x);
     const lineSpan = Math.max(...linePositions) - Math.min(...linePositions);
     const lineCount = linePitch ? Math.round(lineSpan / linePitch) + 1 : pageRuns.length;
-    const charactersPerLine = charPitch
+    const geometricCharacters = charPitch
       ? Math.round((Math.max(...pageRuns.map((run) => run.y)) - Math.min(...pageRuns.map((run) => run.y - (run.chars - 1) * charPitch))) / charPitch) + 1
-      : mode(pageRuns.map((run) => run.chars));
+      : 0;
+    const modeCharacters = mode(pageRuns.map((run) => run.chars));
+    const charactersPerLine = geometricCharacters >= 10 && geometricCharacters <= 80 ? geometricCharacters : modeCharacters;
     return { lineCount, charactersPerLine };
   });
   if (!pageEstimates.length) throw new Error(PDF_LAYOUT_ERROR);
