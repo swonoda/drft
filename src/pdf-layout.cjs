@@ -2,7 +2,11 @@ const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
 
 function decodeStream(stream) {
   if (!stream) return "";
-  const bytes = typeof stream.getContents === "function" ? stream.getContents() : stream.contents;
+  if (typeof stream.getContentsString === "function") {
+    return stream.getContentsString();
+  }
+  const bytes =
+    typeof stream.getContents === "function" ? stream.getContents() : stream.contents;
   return bytes ? Buffer.from(bytes).toString("latin1") : "";
 }
 
