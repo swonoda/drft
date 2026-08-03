@@ -19,7 +19,7 @@ test("PDFの縦書きテキストランから字数と行数を推定する", ()
   });
 });
 
-test("è¦‹é–‹ãPDFã¯å·¦å³ã‚’ä¸€ãƒšãƒ¼ã‚¸ãšã¤ã¨ã—ã¦è¡Œæ•°ã‚’æŽ¨å®šã™ã‚‹", () => {
+test("見開きPDFは左右を一ページずつとして行数を推定する", () => {
   const runs = Array.from({ length: 24 }, (_, index) => ({ chars: 43, x: index, y: 0 }));
   const layout = estimateLayout(runs, 900, 600);
   assert.equal(layout.charactersPerLine, 43);
