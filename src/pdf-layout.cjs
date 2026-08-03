@@ -1,6 +1,6 @@
 const { PDFDocument, PDFArray, PDFName } = require("pdf-lib");
 const zlib = require("node:zlib");
-const PDF_LAYOUT_ERROR = "PDF\\u304b\\u3089\\u672c\\u6587\\u306e\\u6587\\u5b57\\u914d\\u7f6e\\u3092\\u8aad\\u307f\\u53d6\\u308c\\u307e\\u305b\\u3093\\u3067\\u3057\\u305f\\u3002";
+const PDF_LAYOUT_ERROR = "PDF\u304b\u3089\u672c\u6587\u306e\u6587\u5b57\u914d\u7f6e\u3092\u8aad\u307f\u53d6\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002";
 
 function decodeStream(stream) {
   if (!stream) return "";
