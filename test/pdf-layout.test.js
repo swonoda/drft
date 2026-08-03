@@ -1,10 +1,10 @@
-�r�^�f��ئ{M�y�'vî���import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { estimateLayout, parseTextRuns, textTokenCount } = require("../src/pdf-layout.cjs");
 
-test("PDFの縦書きテキストランから字数と行数を推定する", () => {
+test("PDFã®ç¸¦æ›¸ããƒ†ã‚­ã‚¹ãƒˆãƒ©ãƒ³ã‹ã‚‰å­—æ•°ã¨è¡Œæ•°ã‚’æŽ¨å®šã™ã‚‹", () => {
   const content = Array.from({ length: 12 }, (_, index) =>
     `BT 1 0 0 1 ${index * 20} 100 Tm <001200170014001500160017001200170014001500160017001200170014001500160017001200170014001500160017> Tj ET`,
   ).join("\n");
@@ -19,7 +19,7 @@ test("PDFの縦書きテキストランから字数と行数を推定する", ()
   });
 });
 
-test("見開きPDFは左右を一ページずつとして行数を推定する", () => {
+test("è¦‹é–‹ãPDFã¯å·¦å³ã‚’ä¸€ãƒšãƒ¼ã‚¸ãšã¤ã¨ã—ã¦è¡Œæ•°ã‚’æŽ¨å®šã™ã‚‹", () => {
   const runs = Array.from({ length: 24 }, (_, index) => ({ chars: 43, x: index, y: 0 }));
   const layout = estimateLayout(runs, 900, 600);
   assert.equal(layout.charactersPerLine, 43);
