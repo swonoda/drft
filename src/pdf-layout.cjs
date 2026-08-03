@@ -12,9 +12,7 @@ async function resolvePdfToPpm() {
   if (process.platform === "win32") {
     try {
       const popplerDir = require("node-poppler-win32");
-      console.log(popplerDir);
       npmPdftoppm = path.join(popplerDir, "pdftoppm.exe");
-      console.log(npmPdftoppm);
     } catch (error) {
       console.warn("node-poppler-win32の読み込みに失敗しました:", error);
     }
@@ -91,19 +89,16 @@ async function renderPage(pdfPath) {
 function parsePbm(buffer) {
   let offset = 0;
   const nextToken = () => {
-    console.log(buffer);
     while (
       offset < buffer.length &&
       /\s/.test(String.fromCharCode(buffer[offset]))
     )
       offset += 1;
-    console.log(offset);
     if (buffer[offset] === 35) {
       while (offset < buffer.length && buffer[offset] !== 10) offset += 1;
       return nextToken();
     }
     const start = offset;
-    console.log(start);
     while (
       offset < buffer.length &&
       !/\s/.test(String.fromCharCode(buffer[offset]))
@@ -120,7 +115,6 @@ function parsePbm(buffer) {
   )
     offset += 1;
   const rowBytes = Math.ceil(width / 8);
-  console.log(`width:${width}, height: ${height}`);
   return { width, height, rowBytes, data: buffer.subarray(offset) };
 }
 
@@ -241,7 +235,6 @@ function estimateHalf(image, left, right) {
   const bodyBottom = ySpan.end;
   const bodyWidth = bodyRight - bodyLeft;
   const bodyHeight = bodyBottom - bodyTop;
-  console.log(`bodyWidth: ${bodyWidth}, bodyHeight: ${bodyHeight}`);
   if (bodyWidth < 30 || bodyHeight < 30) throw new Error(PDF_LAYOUT_ERROR);
 
   const lineSegments = segments(
