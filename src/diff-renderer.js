@@ -91,6 +91,10 @@ function renderOldPreview(text) {
     `${settings.fontSize * settings.lineHeight}px`,
   );
   oldPreview.style.setProperty(
+    "--diff-preview-body-width",
+    `${bodyWidth}px`,
+  );
+  oldPreview.style.setProperty(
     "--diff-preview-page-width",
     `${bodyWidth + 64}px`,
   );
@@ -104,24 +108,19 @@ function renderOldPreview(text) {
   for (const pageIndex of [1, 0]) {
     const page = document.createElement("article");
     page.className = "preview-page";
+    const pageBody = document.createElement("div");
+    pageBody.className = "preview-page-body";
     const content = document.createElement("div");
     content.className = "preview-page-content";
     content.innerHTML = html;
-    page.append(content);
+    pageBody.append(content);
+    page.append(pageBody);
     oldPreview.append(page);
     pageContents[pageIndex] = content;
   }
 
-  const rightPage = pageContents[0].parentElement;
-  const pageStyle = getComputedStyle(rightPage);
-  const spreadPageOffset = Math.max(
-    1,
-    rightPage.clientWidth -
-      parseFloat(pageStyle.paddingLeft) -
-      parseFloat(pageStyle.paddingRight),
-  );
   pageContents[0].style.transform = "translateX(0)";
-  pageContents[1].style.transform = `translateX(${spreadPageOffset}px)`;
+  pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
 }
 
 function scheduleOldPreviewRender() {
