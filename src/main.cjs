@@ -482,6 +482,7 @@ function diffWindowState(diffWin) {
           name: path.basename(document.path),
           path: document.path,
           encoding: document.encoding,
+          text: document.text,
         }
       : null;
   return {
