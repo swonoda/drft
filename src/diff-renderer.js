@@ -44,10 +44,11 @@ function renderParts(parts) {
 
 function previewSettings() {
   return {
-    font: localStorage.getItem("display.font") || '"Yu Mincho", serif',
-    fontSize: Number(localStorage.getItem("display.fontSize")) || 16,
-    letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0.04,
-    lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.9,
+    font:
+      localStorage.getItem("display.font") || "Yu Mincho, YuMincho, serif",
+    fontSize: Number(localStorage.getItem("display.fontSize")) || 18,
+    letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0,
+    lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.75,
     charactersPerLine: Number(localStorage.getItem("display.lineChars")) || 40,
     linesPerPage: Number(localStorage.getItem("display.previewLines")) || 16,
   };
