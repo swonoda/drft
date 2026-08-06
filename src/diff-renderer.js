@@ -39,6 +39,30 @@ function renderParts(parts) {
 }
 
 
+function paginateOldText(text) {
+  const charactersPerLine =
+    Number(localStorage.getItem("display.lineChars")) || 40;
+  const linesPerPage =
+    Number(localStorage.getItem("display.previewLines")) || 16;
+  const pages = [[]];
+
+  const appendLine = (line) => {
+    if (pages.at(-1).length >= linesPerPage) pages.push([]);
+    pages.at(-1).push(line);
+  };
+
+  for (const sourceLine of text.replaceAll("\r\n", "\n").split("\n")) {
+    if (!sourceLine.length) {
+      appendLine("");
+      continue;
+    }
+    for (let offset = 0; offset < sourceLine.length; offset += charactersPerLine) {
+      appendLine(sourceLine.slice(offset, offset + charactersPerLine));
+    }
+  }
+  return pages.map((page) => page.join("\n"));
+}
+
 function renderOldPreview(text) {
   oldPreview.replaceChildren();
   if (!text) {
@@ -48,13 +72,14 @@ function renderOldPreview(text) {
     oldPreview.append(message);
     return;
   }
-  const midpoint = Math.ceil(text.length / 2);
-  for (const chunk of [text.slice(midpoint), text.slice(0, midpoint)]) {
+
+  const pages = paginateOldText(text);
+  for (const content of [pages[1] ?? "", pages[0]]) {
     const page = document.createElement("article");
     page.className = "preview-page";
     const body = document.createElement("div");
     body.className = "preview-page-text";
-    body.textContent = chunk;
+    body.textContent = content;
     page.append(body);
     oldPreview.append(page);
   }
