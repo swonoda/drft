@@ -1,6 +1,9 @@
 const $ = (id) => document.getElementById(id);
 const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
+const comparison = document.querySelector(".comparison");
+const oldPreview = $("oldPreview");
+let viewMode = "diff";
 let changeIds = [];
 let currentChangeIndex = -1;
 let syncingScroll = false;
@@ -33,6 +36,40 @@ function renderParts(parts) {
   leftDocument.replaceChildren(left);
   rightDocument.replaceChildren(right);
   changeIds = [...new Set(parts.flatMap((part) => part.changeId ?? []))];
+}
+
+
+function renderOldPreview(text) {
+  oldPreview.replaceChildren();
+  if (!text) {
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent = "古いファイルを選択してください";
+    oldPreview.append(message);
+    return;
+  }
+  const midpoint = Math.ceil(text.length / 2);
+  for (const chunk of [text.slice(0, midpoint), text.slice(midpoint)]) {
+    const page = document.createElement("article");
+    page.className = "preview-page";
+    const body = document.createElement("div");
+    body.className = "preview-page-text";
+    body.textContent = chunk;
+    page.append(body);
+    oldPreview.append(page);
+  }
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  const preview = mode === "preview";
+  comparison.classList.toggle("preview-mode", preview);
+  oldPreview.hidden = !preview;
+  $("diffViewButton").classList.toggle("active", !preview);
+  $("oldPreviewButton").classList.toggle("active", preview);
+  $("diffViewButton").setAttribute("aria-pressed", String(!preview));
+  $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
+  if (preview) renderOldPreview(currentState?.left?.text ?? "");
 }
 
 function showEmptyPane(pane, message) {
@@ -129,6 +166,7 @@ $("nextChange").onclick = () => focusChange(currentChangeIndex + 1);
 
 function applyState(comparison) {
   currentState = comparison;
+  renderOldPreview(comparison.left?.text ?? "");
   $("leftFile").textContent = comparison.left?.name ?? "古いファイルを選択…";
   $("rightFile").textContent =
     comparison.right?.name ?? "新しいファイルを選択…";
@@ -193,3 +231,7 @@ try {
 } catch (error) {
   $("status").textContent = `比較できません: ${error.message}`;
 }
+
+
+$("diffViewButton").onclick = () => setViewMode("diff");
+$("oldPreviewButton").onclick = () => setViewMode("preview");
