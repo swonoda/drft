@@ -178,3 +178,73 @@ body {
 .statusbar span:last-child {
   text-align: right;
 }
+
+
+.view-toggle {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--ice);
+}
+
+.view-toggle button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.view-toggle button.active {
+  color: var(--accent-dark);
+  background: #fff;
+  box-shadow: 0 1px 3px #26334b22;
+}
+
+.comparison.preview-mode {
+  display: block;
+  overflow: auto;
+}
+
+.comparison.preview-mode > .document {
+  display: none;
+}
+
+.old-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+  min-height: 100%;
+  padding: 28px;
+  background: var(--paper);
+}
+
+.old-preview[hidden] {
+  display: none;
+}
+
+.preview-page {
+  min-height: 620px;
+  padding: 42px 36px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #fff;
+  box-shadow: 0 5px 18px #26334b14;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+.preview-page-text {
+  max-height: 100%;
+  white-space: pre-wrap;
+  font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+  font-size: 16px;
+  line-height: 1.9;
+  letter-spacing: 0.04em;
+}
