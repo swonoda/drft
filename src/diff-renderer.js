@@ -112,15 +112,9 @@ function renderOldPreview(text) {
   }
 
   const rightPage = pageContents[0].parentElement;
-  const pageStyle = getComputedStyle(rightPage);
-  const measuredBodyWidth = Math.max(
-    1,
-    rightPage.clientWidth -
-      parseFloat(pageStyle.paddingLeft) -
-      parseFloat(pageStyle.paddingRight),
-  );
+  const spreadPageOffset = Math.max(1, rightPage.clientWidth);
   pageContents[0].style.transform = "translateX(0)";
-  pageContents[1].style.transform = `translateX(${measuredBodyWidth}px)`;
+  pageContents[1].style.transform = `translateX(${spreadPageOffset}px)`;
 }
 
 function setViewMode(mode) {
