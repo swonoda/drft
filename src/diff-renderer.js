@@ -11,6 +11,7 @@ let changeIds = [];
 let currentChangeIndex = -1;
 let syncingScroll = false;
 let currentState = null;
+let previewRenderFrame = null;
 
 function makePart(part, side) {
   const span = document.createElement("span");
@@ -117,6 +118,17 @@ function renderOldPreview(text) {
   pageContents[1].style.transform = `translateX(${spreadPageOffset}px)`;
 }
 
+function scheduleOldPreviewRender() {
+  if (previewRenderFrame !== null) {
+    cancelAnimationFrame(previewRenderFrame);
+  }
+  previewRenderFrame = requestAnimationFrame(() => {
+    previewRenderFrame = null;
+    if (viewMode !== "preview" || oldPreview.hidden) return;
+    renderOldPreview(currentState?.left?.text ?? "");
+  });
+}
+
 function setViewMode(mode) {
   viewMode = mode;
   const preview = mode === "preview";
@@ -126,7 +138,7 @@ function setViewMode(mode) {
   $("oldPreviewButton").classList.toggle("active", preview);
   $("diffViewButton").setAttribute("aria-pressed", String(!preview));
   $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
-  if (preview) renderOldPreview(currentState?.left?.text ?? "");
+  if (preview) scheduleOldPreviewRender();
 }
 
 function showEmptyPane(pane, message) {
@@ -223,7 +235,7 @@ $("nextChange").onclick = () => focusChange(currentChangeIndex + 1);
 
 function applyState(comparison) {
   currentState = comparison;
-  renderOldPreview(comparison.left?.text ?? "");
+  if (viewMode === "preview") scheduleOldPreviewRender();
   $("leftFile").textContent = comparison.left?.name ?? "古いファイルを選択…";
   $("rightFile").textContent =
     comparison.right?.name ?? "新しいファイルを選択…";
