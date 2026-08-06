@@ -228,7 +228,7 @@ body {
   gap: 18px;
   min-height: 100%;
   padding: 28px;
-  background: #fbfcff;
+  background: #fff;
 }
 
 .old-preview[hidden] {
