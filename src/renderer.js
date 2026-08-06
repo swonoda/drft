@@ -115,12 +115,10 @@ function pageCount() {
   return previewPageCount(previewContent.scrollWidth, pageWidth());
 }
 function pageWidth() {
-  const style = getComputedStyle(preview);
-  return Math.max(
-    1,
-    preview.clientWidth -
-      parseFloat(style.paddingLeft) -
-      parseFloat(style.paddingRight),
+  return previewPageBodyWidth(
+    $("fontSize").value,
+    $("lineHeight").value,
+    $("previewLines").value,
   );
 }
 function showCurrentPage() {
@@ -482,6 +480,10 @@ function applyPreviewPageSize() {
   document.documentElement.style.setProperty(
     "--preview-line-pitch",
     `${linePitch}px`,
+  );
+  document.documentElement.style.setProperty(
+    "--preview-body-width",
+    `${bodyWidth}px`,
   );
   document.documentElement.style.setProperty(
     "--preview-page-width",

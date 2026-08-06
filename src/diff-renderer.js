@@ -1,10 +1,17 @@
+import { renderPreviewDocument } from "./parser.js";
+import { previewPageBodyWidth } from "./preview-layout.js";
+
 const $ = (id) => document.getElementById(id);
 const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
+const comparison = document.querySelector(".comparison");
+const oldPreview = $("oldPreview");
+let viewMode = "diff";
 let changeIds = [];
 let currentChangeIndex = -1;
 let syncingScroll = false;
 let currentState = null;
+let previewRenderFrame = null;
 
 function makePart(part, side) {
   const span = document.createElement("span");
@@ -33,6 +40,110 @@ function renderParts(parts) {
   leftDocument.replaceChildren(left);
   rightDocument.replaceChildren(right);
   changeIds = [...new Set(parts.flatMap((part) => part.changeId ?? []))];
+}
+
+
+function previewSettings() {
+  return {
+    font:
+      localStorage.getItem("display.font") || "Yu Mincho, YuMincho, serif",
+    fontSize: Number(localStorage.getItem("display.fontSize")) || 18,
+    letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0,
+    lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.75,
+    charactersPerLine: Number(localStorage.getItem("display.lineChars")) || 40,
+    linesPerPage: Number(localStorage.getItem("display.previewLines")) || 16,
+  };
+}
+
+function renderOldPreview(text) {
+  oldPreview.replaceChildren();
+  if (!text) {
+    const message = document.createElement("p");
+    message.className = "empty-message";
+    message.textContent = "古いファイルを選択してください";
+    oldPreview.append(message);
+    return;
+  }
+
+  const settings = previewSettings();
+  const bodyWidth = previewPageBodyWidth(
+    settings.fontSize,
+    settings.lineHeight,
+    settings.linesPerPage,
+  );
+  const pageHeight =
+    settings.charactersPerLine *
+      settings.fontSize *
+      (1 + settings.letterSpacing) +
+    64;
+  oldPreview.style.setProperty("--diff-preview-font", settings.font);
+  oldPreview.style.setProperty("--diff-preview-size", `${settings.fontSize}px`);
+  oldPreview.style.setProperty(
+    "--diff-preview-letter-spacing",
+    `${settings.letterSpacing}em`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-line-height",
+    String(settings.lineHeight),
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-line-pitch",
+    `${settings.fontSize * settings.lineHeight}px`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-body-width",
+    `${bodyWidth}px`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-page-width",
+    `${bodyWidth + 64}px`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-page-height",
+    `${pageHeight}px`,
+  );
+
+  const html = renderPreviewDocument(text);
+  const pageContents = [];
+  for (const pageIndex of [1, 0]) {
+    const page = document.createElement("article");
+    page.className = "preview-page";
+    const pageBody = document.createElement("div");
+    pageBody.className = "preview-page-body";
+    const content = document.createElement("div");
+    content.className = "preview-page-content";
+    content.innerHTML = html;
+    pageBody.append(content);
+    page.append(pageBody);
+    oldPreview.append(page);
+    pageContents[pageIndex] = content;
+  }
+
+  pageContents[0].style.transform = "translateX(0)";
+  pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
+}
+
+function scheduleOldPreviewRender() {
+  if (previewRenderFrame !== null) {
+    cancelAnimationFrame(previewRenderFrame);
+  }
+  previewRenderFrame = requestAnimationFrame(() => {
+    previewRenderFrame = null;
+    if (viewMode !== "preview" || oldPreview.hidden) return;
+    renderOldPreview(currentState?.left?.text ?? "");
+  });
+}
+
+function setViewMode(mode) {
+  viewMode = mode;
+  const preview = mode === "preview";
+  comparison.classList.toggle("preview-mode", preview);
+  oldPreview.hidden = !preview;
+  $("diffViewButton").classList.toggle("active", !preview);
+  $("oldPreviewButton").classList.toggle("active", preview);
+  $("diffViewButton").setAttribute("aria-pressed", String(!preview));
+  $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
+  if (preview) scheduleOldPreviewRender();
 }
 
 function showEmptyPane(pane, message) {
@@ -129,6 +240,7 @@ $("nextChange").onclick = () => focusChange(currentChangeIndex + 1);
 
 function applyState(comparison) {
   currentState = comparison;
+  if (viewMode === "preview") scheduleOldPreviewRender();
   $("leftFile").textContent = comparison.left?.name ?? "古いファイルを選択…";
   $("rightFile").textContent =
     comparison.right?.name ?? "新しいファイルを選択…";
@@ -193,3 +305,7 @@ try {
 } catch (error) {
   $("status").textContent = `比較できません: ${error.message}`;
 }
+
+
+$("diffViewButton").onclick = () => setViewMode("diff");
+$("oldPreviewButton").onclick = () => setViewMode("preview");

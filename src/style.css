@@ -8,6 +8,7 @@
   --ls: 0em;
   --line-chars: 40;
   --preview-line-pitch: 31.5px;
+  --preview-body-width: 504px;
   --preview-page-width: 568px;
   --preview-pane-width: 624px;
   --ink: #29394c;
@@ -396,19 +397,27 @@ article {
   width: min(var(--preview-page-width), 100%);
   height: calc(var(--line-chars) * (var(--size) + var(--ls)) + 64px);
   max-height: 100%;
-  padding: 32px;
+  padding: 0;
   background: var(--paper);
   border: 0;
   overflow: hidden;
   box-shadow: none;
 }
-.preview-content {
+.preview-body {
   position: absolute;
   top: 32px;
   right: 32px;
-  width: max-content;
-  min-width: calc(100% - 64px);
+  width: var(--preview-body-width);
   height: calc(100% - 64px);
+  overflow: hidden;
+}
+.preview-content {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: max-content;
+  min-width: var(--preview-body-width);
+  height: 100%;
   font-family: var(--font);
   font-size: var(--size);
   line-height: var(--lh);

@@ -9,6 +9,8 @@ import {
 
 test("指定行数から縦書きプレビューの本文幅を計算する", () => {
   assert.equal(previewPageBodyWidth(18, 1.75, 16), 504);
+  assert.equal(previewPageBodyWidth(18, 1.75, 20), 630);
+  assert.equal(previewPageBodyWidth(18, 1.75, 24), 756);
 });
 
 test("本文幅を固定ページへ分割する", () => {
@@ -16,6 +18,14 @@ test("本文幅を固定ページへ分割する", () => {
   assert.equal(previewPageForOffset(0, 500, 3), 0);
   assert.equal(previewPageForOffset(500, 500, 3), 1);
   assert.equal(previewPageForOffset(1200, 500, 3), 2);
+});
+
+test("指定行数の境界で次のページへ進む", () => {
+  const pageWidth = previewPageBodyWidth(18, 1.75, 20);
+  assert.equal(previewPageForOffset(pageWidth - 1, pageWidth, 3), 0);
+  assert.equal(previewPageForOffset(pageWidth, pageWidth, 3), 1);
+  assert.equal(previewPageForOffset(pageWidth * 2 - 1, pageWidth, 3), 1);
+  assert.equal(previewPageForOffset(pageWidth * 2, pageWidth, 3), 2);
 });
 
 test("プレビュー幅の半分をエディタの左右余白から引く", () => {
