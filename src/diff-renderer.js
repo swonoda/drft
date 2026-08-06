@@ -99,16 +99,28 @@ function renderOldPreview(text) {
   );
 
   const html = renderPreviewDocument(text);
+  const pageContents = [];
   for (const pageIndex of [1, 0]) {
     const page = document.createElement("article");
     page.className = "preview-page";
     const content = document.createElement("div");
     content.className = "preview-page-content";
     content.innerHTML = html;
-    content.style.transform = `translateX(${pageIndex * bodyWidth}px)`;
     page.append(content);
     oldPreview.append(page);
+    pageContents[pageIndex] = content;
   }
+
+  const rightPage = pageContents[0].parentElement;
+  const pageStyle = getComputedStyle(rightPage);
+  const measuredBodyWidth = Math.max(
+    1,
+    rightPage.clientWidth -
+      parseFloat(pageStyle.paddingLeft) -
+      parseFloat(pageStyle.paddingRight),
+  );
+  pageContents[0].style.transform = "translateX(0)";
+  pageContents[1].style.transform = `translateX(${measuredBodyWidth}px)`;
 }
 
 function setViewMode(mode) {
