@@ -225,7 +225,7 @@ body {
     minmax(280px, var(--diff-preview-page-width, 520px))
   );
   justify-content: center;
-  gap: 18px;
+  gap: 0;
   min-height: 100%;
   padding: 28px;
   background: #fff;
@@ -244,7 +244,15 @@ body {
   overflow: hidden;
   border: 1px solid #dfe5f0;
   background: #fff;
-  box-shadow: 0 5px 18px #26334b14;
+  box-shadow: none;
+}
+
+.preview-page:first-child {
+  border-right: 0;
+}
+
+.preview-page:last-child {
+  border-left: 0;
 }
 
 .preview-page-content {
