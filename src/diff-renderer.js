@@ -1,3 +1,6 @@
+import { renderPreviewDocument } from "./parser.js";
+import { previewPageBodyWidth } from "./preview-layout.js";
+
 const $ = (id) => document.getElementById(id);
 const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
@@ -39,28 +42,15 @@ function renderParts(parts) {
 }
 
 
-function paginateOldText(text) {
-  const charactersPerLine =
-    Number(localStorage.getItem("display.lineChars")) || 40;
-  const linesPerPage =
-    Number(localStorage.getItem("display.previewLines")) || 16;
-  const pages = [[]];
-
-  const appendLine = (line) => {
-    if (pages.at(-1).length >= linesPerPage) pages.push([]);
-    pages.at(-1).push(line);
+function previewSettings() {
+  return {
+    font: localStorage.getItem("display.font") || '"Yu Mincho", serif',
+    fontSize: Number(localStorage.getItem("display.fontSize")) || 16,
+    letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0.04,
+    lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.9,
+    charactersPerLine: Number(localStorage.getItem("display.lineChars")) || 40,
+    linesPerPage: Number(localStorage.getItem("display.previewLines")) || 16,
   };
-
-  for (const sourceLine of text.replaceAll("\r\n", "\n").split("\n")) {
-    if (!sourceLine.length) {
-      appendLine("");
-      continue;
-    }
-    for (let offset = 0; offset < sourceLine.length; offset += charactersPerLine) {
-      appendLine(sourceLine.slice(offset, offset + charactersPerLine));
-    }
-  }
-  return pages.map((page) => page.join("\n"));
 }
 
 function renderOldPreview(text) {
@@ -73,14 +63,49 @@ function renderOldPreview(text) {
     return;
   }
 
-  const pages = paginateOldText(text);
-  for (const content of [pages[1] ?? "", pages[0]]) {
+  const settings = previewSettings();
+  const bodyWidth = previewPageBodyWidth(
+    settings.fontSize,
+    settings.lineHeight,
+    settings.linesPerPage,
+  );
+  const pageHeight =
+    settings.charactersPerLine *
+      settings.fontSize *
+      (1 + settings.letterSpacing) +
+    64;
+  oldPreview.style.setProperty("--diff-preview-font", settings.font);
+  oldPreview.style.setProperty("--diff-preview-size", `${settings.fontSize}px`);
+  oldPreview.style.setProperty(
+    "--diff-preview-letter-spacing",
+    `${settings.letterSpacing}em`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-line-height",
+    String(settings.lineHeight),
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-line-pitch",
+    `${settings.fontSize * settings.lineHeight}px`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-page-width",
+    `${bodyWidth + 64}px`,
+  );
+  oldPreview.style.setProperty(
+    "--diff-preview-page-height",
+    `${pageHeight}px`,
+  );
+
+  const html = renderPreviewDocument(text);
+  for (const pageIndex of [1, 0]) {
     const page = document.createElement("article");
     page.className = "preview-page";
-    const body = document.createElement("div");
-    body.className = "preview-page-text";
-    body.textContent = content;
-    page.append(body);
+    const content = document.createElement("div");
+    content.className = "preview-page-content";
+    content.innerHTML = html;
+    content.style.transform = `translateX(${pageIndex * bodyWidth}px)`;
+    page.append(content);
     oldPreview.append(page);
   }
 }
