@@ -49,7 +49,7 @@ function renderOldPreview(text) {
     return;
   }
   const midpoint = Math.ceil(text.length / 2);
-  for (const chunk of [text.slice(0, midpoint), text.slice(midpoint)]) {
+  for (const chunk of [text.slice(midpoint), text.slice(0, midpoint)]) {
     const page = document.createElement("article");
     page.className = "preview-page";
     const body = document.createElement("div");
