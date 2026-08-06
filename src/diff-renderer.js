@@ -113,7 +113,13 @@ function renderOldPreview(text) {
   }
 
   const rightPage = pageContents[0].parentElement;
-  const spreadPageOffset = Math.max(1, rightPage.clientWidth);
+  const pageStyle = getComputedStyle(rightPage);
+  const spreadPageOffset = Math.max(
+    1,
+    rightPage.clientWidth -
+      parseFloat(pageStyle.paddingLeft) -
+      parseFloat(pageStyle.paddingRight),
+  );
   pageContents[0].style.transform = "translateX(0)";
   pageContents[1].style.transform = `translateX(${spreadPageOffset}px)`;
 }
