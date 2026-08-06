@@ -9,6 +9,8 @@ import {
 
 test("指定行数から縦書きプレビューの本文幅を計算する", () => {
   assert.equal(previewPageBodyWidth(18, 1.75, 16), 504);
+  assert.equal(previewPageBodyWidth(18, 1.75, 20), 630);
+  assert.equal(previewPageBodyWidth(18, 1.75, 24), 756);
 });
 
 test("本文幅を固定ページへ分割する", () => {
