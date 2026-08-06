@@ -21,10 +21,15 @@
       <button class="file-label right" id="rightFile" type="button">
         新しいファイルを選択…
       </button>
+      <div class="view-toggle" role="group" aria-label="表示切り替え">
+        <button id="diffViewButton" class="active" type="button">差分</button>
+        <button id="oldPreviewButton" type="button">古いファイルの縦書き</button>
+      </div>
     </header>
     <main class="comparison">
       <pre class="document" id="leftDocument" tabindex="0"></pre>
       <pre class="document" id="rightDocument" tabindex="0"></pre>
+      <section class="old-preview" id="oldPreview" hidden aria-label="古いファイルの縦書きプレビュー"></section>
     </main>
     <footer class="statusbar">
       <span id="leftPath"></span>
