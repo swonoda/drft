@@ -1,5 +1,16 @@
 const { PDFDocument } = require("pdf-lib");
 
+async function combineFirstPages(pdfDocuments) {
+  const output = await PDFDocument.create();
+  for (const bytes of pdfDocuments) {
+    const source = await PDFDocument.load(bytes);
+    if (!source.getPageCount()) continue;
+    const [page] = await output.copyPages(source, [0]);
+    output.addPage(page);
+  }
+  return output.save();
+}
+
 async function imposeRightBoundSpreads(sourceBytes) {
   const source = await PDFDocument.load(sourceBytes);
   const output = await PDFDocument.create();
@@ -29,4 +40,4 @@ async function imposeRightBoundSpreads(sourceBytes) {
   return output.save();
 }
 
-module.exports = { imposeRightBoundSpreads };
+module.exports = { combineFirstPages, imposeRightBoundSpreads };
