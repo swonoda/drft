@@ -1,17 +1,29 @@
 import { renderPreviewDocument } from "./parser.js";
-import { previewPageBodyWidth } from "./preview-layout.js";
+import {
+  previewPageBodyWidth,
+  previewPageCount,
+} from "./preview-layout.js";
 
 const $ = (id) => document.getElementById(id);
 const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
 const comparison = document.querySelector(".comparison");
 const oldPreview = $("oldPreview");
+const proofPdfButton = $("proofPdfButton");
+const proofPdfDialog = $("proofPdfDialog");
 let viewMode = "diff";
 let changeIds = [];
 let currentChangeIndex = -1;
 let syncingScroll = false;
 let currentState = null;
 let previewRenderFrame = null;
+let proofPdfPreview = null;
+const proofPdfLayout = {
+  marginTopMm: 10,
+  marginRightMm: 10,
+  marginBottomMm: 10,
+  marginLeftMm: 10,
+};
 
 function makePart(part, side) {
   const span = document.createElement("span");
@@ -56,12 +68,14 @@ function previewSettings() {
 }
 
 function renderOldPreview(text) {
+  proofPdfPreview = null;
   oldPreview.replaceChildren();
   if (!text) {
     const message = document.createElement("p");
     message.className = "empty-message";
     message.textContent = "古いファイルを選択してください";
     oldPreview.append(message);
+    updateProofPdfButton();
     return;
   }
 
@@ -121,6 +135,19 @@ function renderOldPreview(text) {
 
   pageContents[0].style.transform = "translateX(0)";
   pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
+  proofPdfPreview = {
+    bodyWidth,
+    pageWidth: bodyWidth + 64,
+    pageHeight,
+    pageCount: previewPageCount(pageContents[0].scrollWidth, bodyWidth),
+    template: pageContents[0].closest(".preview-page"),
+  };
+  updateProofPdfButton();
+}
+
+function updateProofPdfButton() {
+  proofPdfButton.hidden =
+    viewMode !== "preview" || !currentState?.left || !proofPdfPreview;
 }
 
 function scheduleOldPreviewRender() {
@@ -144,7 +171,137 @@ function setViewMode(mode) {
   $("diffViewButton").setAttribute("aria-pressed", String(!preview));
   $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
   if (preview) scheduleOldPreviewRender();
+  updateProofPdfButton();
 }
+
+function stylesheetText() {
+  return Array.from(document.styleSheets)
+    .flatMap((sheet) => {
+      try {
+        return Array.from(sheet.cssRules, (rule) => rule.cssText);
+      } catch {
+        return [];
+      }
+    })
+    .join("\n");
+}
+
+function buildProofPdfHtml() {
+  if (!proofPdfPreview?.template) {
+    throw new Error("縦書きプレビューを表示してください");
+  }
+  const { bodyWidth, pageWidth, pageHeight, pageCount, template } =
+    proofPdfPreview;
+  const {
+    marginTopMm,
+    marginRightMm,
+    marginBottomMm,
+    marginLeftMm,
+  } = proofPdfLayout;
+  const pages = document.createElement("main");
+  pages.className = "proof-pages";
+  pages.style.cssText = oldPreview.style.cssText;
+  const availableWidth =
+    ((148 - marginRightMm - marginLeftMm) / 25.4) * 96;
+  const availableHeight =
+    ((210 - marginTopMm - marginBottomMm) / 25.4) * 96;
+  const scale = Math.min(
+    availableWidth / pageWidth,
+    availableHeight / pageHeight,
+  );
+  pages.style.setProperty("--proof-page-scale", String(scale));
+  pages.style.setProperty("--proof-page-width", `${pageWidth * scale}px`);
+  pages.style.setProperty("--proof-page-height", `${pageHeight * scale}px`);
+  pages.style.setProperty("--proof-margin-top", `${marginTopMm}mm`);
+  pages.style.setProperty("--proof-margin-right", `${marginRightMm}mm`);
+  pages.style.setProperty("--proof-margin-bottom", `${marginBottomMm}mm`);
+  pages.style.setProperty("--proof-margin-left", `${marginLeftMm}mm`);
+
+  const sheet = document.createElement("section");
+  sheet.className = "proof-sheet";
+  const page = template.cloneNode(true);
+  page.classList.add("proof-page");
+  page.querySelector(".preview-page-content").style.transform =
+    "translateX(var(--proof-content-offset))";
+  const frame = document.createElement("div");
+  frame.className = "proof-page-frame";
+  frame.append(page);
+  sheet.append(frame);
+  pages.append(sheet);
+
+  const printCss = `
+    @page { size: A5 portrait; margin: 0; }
+    html, body { width: auto; height: auto; margin: 0; overflow: visible; background: #fff; }
+    body { display: block; }
+    .proof-pages { display: block; min-height: 0; padding: 0; background: #fff; }
+    .proof-sheet {
+      display: grid;
+      place-items: center;
+      box-sizing: border-box;
+      width: 148mm;
+      height: 210mm;
+      padding: var(--proof-margin-top) var(--proof-margin-right) var(--proof-margin-bottom) var(--proof-margin-left);
+      overflow: hidden;
+    }
+    .proof-page-frame {
+      position: relative;
+      width: var(--proof-page-width);
+      height: var(--proof-page-height);
+      overflow: hidden;
+    }
+    .proof-page {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--diff-preview-page-width);
+      height: var(--diff-preview-page-height);
+      min-height: 0;
+      transform: scale(var(--proof-page-scale));
+      transform-origin: top left;
+    }
+    .proof-page::after { border: 0; }
+  `;
+  return {
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}</body></html>`,
+    pageCount,
+    bodyWidth,
+  };
+}
+
+async function openProofPdfDialog() {
+  try {
+    $("proofPdfPath").value = await window.diffApi.proofPdfDefaultPath();
+    proofPdfDialog.showModal();
+  } catch (error) {
+    $("status").textContent = `PDFを出力できません: ${error.message}`;
+  }
+}
+
+proofPdfButton.onclick = openProofPdfDialog;
+$("browseProofPdfPath").onclick = async () => {
+  const file = await window.diffApi.chooseProofPdfPath($("proofPdfPath").value);
+  if (file) $("proofPdfPath").value = file;
+};
+$("cancelProofPdf").onclick = () => proofPdfDialog.close();
+$("proofPdfForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = $("exportProofPdf");
+  submit.disabled = true;
+  $("status").textContent = "朱入り原稿PDFを作成しています…";
+  try {
+    const proofPdf = buildProofPdfHtml();
+    const file = await window.diffApi.exportProofPdf({
+      filePath: $("proofPdfPath").value,
+      ...proofPdf,
+    });
+    proofPdfDialog.close();
+    $("status").textContent = `PDF出力済み — ${file}`;
+  } catch (error) {
+    $("status").textContent = `PDFを出力できません: ${error.message}`;
+  } finally {
+    submit.disabled = false;
+  }
+});
 
 function showEmptyPane(pane, message) {
   const empty = document.createElement("span");
@@ -240,6 +397,8 @@ $("nextChange").onclick = () => focusChange(currentChangeIndex + 1);
 
 function applyState(comparison) {
   currentState = comparison;
+  proofPdfPreview = null;
+  updateProofPdfButton();
   if (viewMode === "preview") scheduleOldPreviewRender();
   $("leftFile").textContent = comparison.left?.name ?? "古いファイルを選択…";
   $("rightFile").textContent =

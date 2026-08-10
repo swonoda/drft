@@ -31,6 +31,23 @@
       <pre class="document" id="rightDocument" tabindex="0"></pre>
       <section class="old-preview" id="oldPreview" hidden aria-label="古いファイルの縦書きプレビュー"></section>
     </main>
+    <button class="proof-pdf-button" id="proofPdfButton" type="button" hidden>
+      朱入り原稿PDF
+    </button>
+    <dialog class="proof-pdf-dialog" id="proofPdfDialog">
+      <form id="proofPdfForm">
+        <h2>朱入り原稿PDF</h2>
+        <label for="proofPdfPath">保存場所</label>
+        <div class="proof-pdf-path-row">
+          <input id="proofPdfPath" type="text" required />
+          <button id="browseProofPdfPath" type="button">参照…</button>
+        </div>
+        <div class="proof-pdf-dialog-actions">
+          <button id="cancelProofPdf" type="button">キャンセル</button>
+          <button id="exportProofPdf" type="submit">OK</button>
+        </div>
+      </form>
+    </dialog>
     <footer class="statusbar">
       <span id="leftPath"></span>
       <span id="status">古いファイルと新しいファイルを選択してください</span>

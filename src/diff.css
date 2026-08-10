@@ -341,3 +341,102 @@ body {
   text-emphasis-style: filled sesame;
   text-emphasis-position: over right;
 }
+
+.proof-pdf-button {
+  position: fixed;
+  right: 22px;
+  bottom: 44px;
+  z-index: 4;
+  padding: 9px 14px;
+  border: 1px solid #cbd5e8;
+  border-radius: 9px;
+  color: #405171;
+  background: #fff;
+  box-shadow: 0 4px 14px #26334b24;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.proof-pdf-button:hover {
+  border-color: #8095ca;
+  color: #405b91;
+}
+
+.proof-pdf-button[hidden] {
+  display: none;
+}
+
+.proof-pdf-dialog {
+  width: min(620px, calc(100vw - 48px));
+  padding: 22px;
+  border: 1px solid #d8e0ef;
+  border-radius: 10px;
+  color: #26334b;
+  background: #fff;
+  box-shadow: 0 16px 48px #26334b30;
+}
+
+.proof-pdf-dialog::backdrop {
+  background: #26334b33;
+}
+
+.proof-pdf-dialog form {
+  display: grid;
+  gap: 12px;
+}
+
+.proof-pdf-dialog h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.proof-pdf-dialog label {
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.proof-pdf-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.proof-pdf-path-row input,
+.proof-pdf-dialog button {
+  min-height: 34px;
+  border: 1px solid #d8e0ef;
+  border-radius: 6px;
+  color: #26334b;
+  background: #fff;
+  font: inherit;
+}
+
+.proof-pdf-path-row input {
+  min-width: 0;
+  padding: 6px 9px;
+}
+
+.proof-pdf-dialog button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.proof-pdf-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+#exportProofPdf {
+  border-color: #8095ca;
+  color: #fff;
+  background: #6177ad;
+}
+
+#exportProofPdf:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

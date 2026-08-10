@@ -1,12 +1,16 @@
 const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { imposeRightBoundSpreads } = require("./pdf-spread.cjs");
+const {
+  combineFirstPages,
+  imposeRightBoundSpreads,
+} = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts } = require("./diff-engine.cjs");
 const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
+const { proofPdfDefaultPath, ensurePdfExtension } = require("./proof-pdf.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -434,25 +438,65 @@ ipcMain.handle("file:snapshot", async (_e, text, encoding) => {
   return file;
 });
 
+async function renderSpreadPdf(html) {
+  const pdfWin = new BrowserWindow({
+    show: false,
+    webPreferences: { sandbox: true },
+  });
+  try {
+    await pdfWin.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+    );
+    const data = await pdfWin.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
+    return imposeRightBoundSpreads(data);
+  } finally {
+    pdfWin.destroy();
+  }
+}
+
+async function renderProofSpreadPdf(html, pageCount, bodyWidth) {
+  const pdfWin = new BrowserWindow({
+    show: false,
+    webPreferences: { sandbox: true },
+  });
+  try {
+    await pdfWin.loadURL(
+      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+    );
+    await pdfWin.webContents.executeJavaScript("document.fonts.ready");
+    const singlePages = [];
+    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+      const offset = `${pageIndex * bodyWidth}px`;
+      await pdfWin.webContents.executeJavaScript(`
+        document.querySelector(".proof-pages").style.setProperty(
+          "--proof-content-offset",
+          ${JSON.stringify(offset)}
+        );
+        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      `);
+      singlePages.push(
+        await pdfWin.webContents.printToPDF({
+          printBackground: true,
+          preferCSSPageSize: true,
+        }),
+      );
+    }
+    return imposeRightBoundSpreads(await combineFirstPages(singlePages));
+  } finally {
+    pdfWin.destroy();
+  }
+}
+
 ipcMain.handle("file:exportPdf", async (_e, html) => {
   const r = await dialog.showSaveDialog(win, {
     defaultPath: "原稿.pdf",
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (r.canceled) return null;
-  const pdfWin = new BrowserWindow({
-    show: false,
-    webPreferences: { sandbox: true },
-  });
-  await pdfWin.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
-  );
-  const data = await pdfWin.webContents.printToPDF({
-    printBackground: true,
-    preferCSSPageSize: true,
-  });
-  await fs.writeFile(r.filePath, await imposeRightBoundSpreads(data));
-  pdfWin.destroy();
+  await fs.writeFile(r.filePath, await renderSpreadPdf(html));
   return r.filePath;
 });
 
@@ -521,4 +565,55 @@ ipcMain.handle("diff:choose", async (event, side) => {
     ...decodeText(await fs.readFile(file)),
   };
   return diffWindowState(diffWin);
+});
+
+ipcMain.handle("diff:proofPdfDefaultPath", (event) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  const sourcePath = diffWin?.diffDocuments?.left?.path;
+  if (!sourcePath) throw new Error("古いファイルが選択されていません");
+  return proofPdfDefaultPath(sourcePath);
+});
+
+ipcMain.handle("diff:chooseProofPdfPath", async (event, defaultPath) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  if (!diffWin?.diffDocuments?.left) {
+    throw new Error("古いファイルが選択されていません");
+  }
+  const result = await dialog.showSaveDialog(diffWin, {
+    defaultPath:
+      typeof defaultPath === "string" && defaultPath
+        ? defaultPath
+        : proofPdfDefaultPath(diffWin.diffDocuments.left.path),
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  return result.canceled ? null : ensurePdfExtension(result.filePath);
+});
+
+ipcMain.handle("diff:exportProofPdf", async (event, payload) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  if (!diffWin?.diffDocuments?.left) {
+    throw new Error("古いファイルが選択されていません");
+  }
+  if (!payload || typeof payload.html !== "string") {
+    throw new Error("縦書きプレビューをPDFへ変換できません");
+  }
+  if (!Number.isInteger(payload.pageCount) || payload.pageCount < 1) {
+    throw new Error("PDFへ出力するページ数を取得できません");
+  }
+  if (!Number.isFinite(payload.bodyWidth) || payload.bodyWidth <= 0) {
+    throw new Error("PDFへ出力する本文幅を取得できません");
+  }
+  if (typeof payload.filePath !== "string" || !payload.filePath.trim()) {
+    throw new Error("PDFの保存場所を指定してください");
+  }
+  const file = ensurePdfExtension(payload.filePath.trim());
+  await fs.writeFile(
+    file,
+    await renderProofSpreadPdf(
+      payload.html,
+      payload.pageCount,
+      payload.bodyWidth,
+    ),
+  );
+  return file;
 });
