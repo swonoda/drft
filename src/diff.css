@@ -35,6 +35,11 @@ body {
 }
 
 .file-label {
+  grid-row: 1;
+  align-self: center;
+  justify-self: start;
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
   padding: 7px 10px;
   border: 1px solid transparent;
@@ -57,6 +62,7 @@ body {
 
 .file-label.right {
   grid-column: 3;
+  justify-self: end;
   text-align: right;
 }
 
@@ -183,9 +189,10 @@ body {
 
 
 .view-toggle {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  grid-row: 1;
+  grid-column: 2;
+  align-self: center;
+  justify-self: center;
   display: inline-flex;
   gap: 4px;
   padding: 3px;

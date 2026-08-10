@@ -150,6 +150,7 @@ function openDiffWindow() {
       contextIsolation: true,
     },
   });
+  diffWin.setMenu(null);
   diffWin.diffDocuments = { left: null, right: null };
   diffWindows.add(diffWin);
   diffWin.loadFile(path.join(__dirname, "diff.html"));
