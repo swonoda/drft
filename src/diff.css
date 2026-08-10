@@ -35,6 +35,8 @@ body {
 }
 
 .file-label {
+  grid-row: 1;
+  align-self: center;
   justify-self: start;
   width: fit-content;
   max-width: 100%;
@@ -187,7 +189,10 @@ body {
 
 
 .view-toggle {
+  grid-row: 1;
   grid-column: 2;
+  align-self: center;
+  justify-self: center;
   display: inline-flex;
   gap: 4px;
   padding: 3px;
