@@ -1,5 +1,8 @@
 import { manuscriptText, renderPreviewDocument } from "./parser.js";
-import { findProofreadNotePosition } from "./proofread-layout.js";
+import {
+  findInlineProofreadPosition,
+  findProofreadNotePosition,
+} from "./proofread-layout.js";
 import {
   fixedSpreadPreviewLayout,
   previewPageCount,
@@ -199,10 +202,30 @@ function positionProofreadNotes(page) {
       layer.append(note);
       continue;
     }
+    const anchorPageRect = toPageRect(anchorRect);
+    const inlinePosition = findInlineProofreadPosition({
+      pageWidth: page.offsetWidth,
+      pageHeight: page.offsetHeight,
+      noteLength: [...change.note].length,
+      baseFontSize: fontSize,
+      anchorRect: anchorPageRect,
+      occupied,
+      gap: Math.max(1, fontSize * 0.08),
+    });
+    if (inlinePosition) {
+      note.classList.add("proofread-note-inline");
+      note.style.fontSize = `${inlinePosition.fontSize}px`;
+      note.style.top = `${inlinePosition.y}px`;
+      note.style.left = `${inlinePosition.x}px`;
+      layer.append(note);
+      occupied.push(inlinePosition);
+      continue;
+    }
+
     note.style.fontSize = `${fontSize}px`;
     const anchor = {
-      x: (anchorRect.left + anchorRect.width / 2 - pageRect.left) / scaleX,
-      y: (anchorRect.top + anchorRect.height / 2 - pageRect.top) / scaleY,
+      x: anchorPageRect.x + anchorPageRect.width / 2,
+      y: anchorPageRect.y,
     };
     const position = findProofreadNotePosition({
       pageWidth: page.offsetWidth,
@@ -636,7 +659,7 @@ function buildProofPdfHtml() {
     .proof-page::after { border: 0; }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     pageCount,
     bodyWidth,
   };

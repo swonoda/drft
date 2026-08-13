@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findProofreadNotePosition } from "../src/proofread-layout.js";
+import {
+  findInlineProofreadPosition,
+  findProofreadNotePosition,
+} from "../src/proofread-layout.js";
 
 test("本文領域内を含む最寄りの空白へ校正文字を置く", () => {
   const position = findProofreadNotePosition({
@@ -52,4 +55,38 @@ test("長い校正文字でも中心ではなく最も近い辺までの距離�
   });
   assert.ok(position.y >= 82);
   assert.ok(position.x >= 50 && position.x <= 78);
+});
+
+test("短い置換文字は取り消し線右側の行間へ置く", () => {
+  const position = findInlineProofreadPosition({
+    pageWidth: 120,
+    pageHeight: 200,
+    noteLength: 3,
+    baseFontSize: 16,
+    anchorRect: { x: 50, y: 40, width: 12, height: 48 },
+    occupied: [
+      { x: 50, y: 20, width: 12, height: 100 },
+      { x: 80, y: 20, width: 12, height: 100 },
+    ],
+  });
+  assert.ok(position);
+  assert.ok(position.x > 62 && position.x < 80);
+  assert.ok(position.fontSize < 16);
+});
+
+test("行間やページ下端へ収まらない置換文字は欄外配置へ回す", () => {
+  assert.equal(
+    findInlineProofreadPosition({
+      pageWidth: 120,
+      pageHeight: 100,
+      noteLength: 8,
+      baseFontSize: 16,
+      anchorRect: { x: 50, y: 40, width: 12, height: 48 },
+      occupied: [
+        { x: 50, y: 20, width: 12, height: 80 },
+        { x: 80, y: 20, width: 12, height: 80 },
+      ],
+    }),
+    null,
+  );
 });

@@ -43,3 +43,51 @@ export function findProofreadNotePosition({
     }
   );
 }
+
+export function findInlineProofreadPosition({
+  pageWidth,
+  pageHeight,
+  noteLength,
+  baseFontSize,
+  anchorRect,
+  occupied,
+  gap = 2,
+}) {
+  const anchorRight = anchorRect.x + anchorRect.width;
+  const rightNeighbors = occupied.filter(
+    (rect) =>
+      rect.x >= anchorRight &&
+      rect.y < pageHeight &&
+      rect.y + rect.height > anchorRect.y,
+  );
+  const rightBoundary = rightNeighbors.length
+    ? Math.min(...rightNeighbors.map((rect) => rect.x))
+    : pageWidth;
+  const availableWidth = rightBoundary - anchorRight - gap * 2;
+  const maximumFontSize = baseFontSize * 0.88;
+  const minimumFontSize = baseFontSize * 0.72;
+  const fontSize = Math.min(maximumFontSize, availableWidth);
+  if (fontSize < minimumFontSize) return null;
+
+  const width = fontSize;
+  const height = Math.max(fontSize, noteLength * fontSize);
+  const candidate = {
+    x: anchorRight + gap + Math.max(0, (availableWidth - width) / 2),
+    y: anchorRect.y,
+    width,
+    height,
+    fontSize,
+  };
+  if (candidate.y + candidate.height + gap > pageHeight) return null;
+
+  const overlaps = (a, b) =>
+    !(
+      a.x + a.width <= b.x ||
+      b.x + b.width <= a.x ||
+      a.y + a.height <= b.y ||
+      b.y + b.height <= a.y
+    );
+  return occupied.every((rect) => !overlaps(candidate, rect))
+    ? candidate
+    : null;
+}
