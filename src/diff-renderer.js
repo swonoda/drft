@@ -1,4 +1,5 @@
 import { manuscriptText, renderPreviewDocument } from "./parser.js";
+import { findProofreadNotePosition } from "./proofread-layout.js";
 import {
   fixedSpreadPreviewLayout,
   previewPageCount,
@@ -125,6 +126,12 @@ function positionProofreadNotes(page) {
     .getBoundingClientRect();
   const scaleX = pageRect.width / page.offsetWidth;
   const scaleY = pageRect.height / page.offsetHeight;
+  const toPageRect = (rect) => ({
+    x: (rect.left - pageRect.left) / scaleX,
+    y: (rect.top - pageRect.top) / scaleY,
+    width: rect.width / scaleX,
+    height: rect.height / scaleY,
+  });
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
   const nodes = [];
   let offset = 0;
@@ -139,6 +146,24 @@ function positionProofreadNotes(page) {
     rect.left < bodyRect.right &&
     rect.bottom > bodyRect.top &&
     rect.top < bodyRect.bottom;
+  const occupied = [];
+  for (const item of nodes) {
+    const textRange = document.createRange();
+    textRange.selectNodeContents(item.node);
+    occupied.push(
+      ...[...textRange.getClientRects()].filter(visible).map(toPageRect),
+    );
+  }
+  const leaderSvg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  leaderSvg.classList.add("proofread-leaders");
+  leaderSvg.setAttribute(
+    "viewBox",
+    `0 0 ${page.offsetWidth} ${page.offsetHeight}`,
+  );
+  layer.append(leaderSvg);
   for (const change of changes) {
     const first = nodes.find((item) => change.start < item.end);
     const last = [...nodes].reverse().find((item) => change.end > item.start);
@@ -149,8 +174,8 @@ function positionProofreadNotes(page) {
       last.node,
       Math.min(last.node.data.length, change.end - last.start),
     );
-    const rects = [...range.getClientRects()];
-    for (const rect of rects.filter(visible)) {
+    const visibleRects = [...range.getClientRects()].filter(visible);
+    for (const rect of visibleRects) {
       const strike = document.createElement("span");
       strike.className = "proofread-strike";
       strike.style.top = `${(rect.top - pageRect.top) / scaleY}px`;
@@ -158,15 +183,53 @@ function positionProofreadNotes(page) {
       strike.style.height = `${rect.height / scaleY}px`;
       layer.append(strike);
     }
-    const anchorRect = rects[0];
-    if (!anchorRect || !visible(anchorRect)) continue;
+    const anchorRect = visibleRects[0];
+    if (!anchorRect) continue;
     const note = document.createElement("span");
-    note.className = "proofread-note";
+    note.className = `proofread-note proofread-note-${change.type}`;
     note.textContent = change.note;
-    note.style.fontSize = `${parseFloat(getComputedStyle(first.node.parentElement).fontSize) * 0.5}px`;
-    note.style.top = `${(anchorRect.top - pageRect.top) / scaleY}px`;
-    note.style.left = `${(anchorRect.right - pageRect.left) / scaleX + 2}px`;
+    const fontSize = parseFloat(
+      getComputedStyle(first.node.parentElement).fontSize,
+    );
+    if (change.type === "delete") {
+      note.style.fontSize = `${fontSize * 0.5}px`;
+      note.style.top = `${(anchorRect.top - pageRect.top) / scaleY}px`;
+      note.style.left = `${(anchorRect.right - pageRect.left) / scaleX + 2}px`;
+      layer.append(note);
+      continue;
+    }
+    note.style.fontSize = `${fontSize}px`;
+    const anchor = {
+      x: (anchorRect.left + anchorRect.width / 2 - pageRect.left) / scaleX,
+      y: (anchorRect.top + anchorRect.height / 2 - pageRect.top) / scaleY,
+    };
+    const position = findProofreadNotePosition({
+      pageWidth: page.offsetWidth,
+      pageHeight: page.offsetHeight,
+      noteWidth: fontSize * 1.15,
+      noteHeight: Math.max(fontSize, [...change.note].length * fontSize),
+      anchor,
+      occupied,
+      gap: Math.max(3, fontSize * 0.2),
+      step: Math.max(4, fontSize * 0.35),
+    });
+    note.style.top = `${position.y}px`;
+    note.style.left = `${position.x}px`;
     layer.append(note);
+    occupied.push(position);
+    const destination = {
+      x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
+      y: Math.max(position.y, Math.min(position.y + position.height, anchor.y)),
+    };
+    const leader = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "line",
+    );
+    leader.setAttribute("x1", anchor.x);
+    leader.setAttribute("y1", anchor.y);
+    leader.setAttribute("x2", destination.x);
+    leader.setAttribute("y2", destination.y);
+    leaderSvg.append(leader);
   }
   page.append(layer);
 }
@@ -547,7 +610,7 @@ function buildProofPdfHtml() {
     .proof-page::after { border: 0; }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     pageCount,
     bodyWidth,
   };
