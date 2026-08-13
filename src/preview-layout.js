@@ -6,8 +6,16 @@ export function previewPageBodyWidth(fontSize, lineHeight, linesPerPage) {
   return Math.max(1, Math.ceil(size * height * lines));
 }
 
-export function previewPageCount(contentWidth, pageWidth) {
-  return Math.max(1, Math.ceil(contentWidth / Math.max(1, pageWidth)));
+export function previewPageCount(
+  contentWidth,
+  pageWidth,
+  roundingTolerance = 0,
+) {
+  const tolerance = Math.max(0, Number(roundingTolerance) || 0);
+  return Math.max(
+    1,
+    Math.ceil((Math.max(0, contentWidth) - tolerance) / Math.max(1, pageWidth)),
+  );
 }
 
 export function fixedSpreadPreviewLayout({
@@ -19,6 +27,8 @@ export function fixedSpreadPreviewLayout({
   pageHeightMm = 210,
   pixelsPerMm = 96 / 25.4,
 }) {
+  const snapToLayoutPixel = (value) =>
+    Math.max(1 / 64, Math.floor(value * 64) / 64);
   const pageWidth = Math.max(1, Number(pageWidthMm) * Number(pixelsPerMm));
   const pageHeight = Math.max(1, Number(pageHeightMm) * Number(pixelsPerMm));
   const verticalMargin = Math.min(
@@ -31,10 +41,12 @@ export function fixedSpreadPreviewLayout({
   );
   const characters = Math.max(1, Number(charactersPerLine) || 1);
   const lines = Math.max(1, Number(linesPerPage) || 1);
-  const bodyWidth = Math.max(1, pageWidth - horizontalMargin * 2);
-  const bodyHeight = Math.max(1, pageHeight - verticalMargin * 2);
-  const linePitch = bodyWidth / lines;
-  const fontSize = bodyHeight / characters;
+  const availableBodyWidth = Math.max(1, pageWidth - horizontalMargin * 2);
+  const availableBodyHeight = Math.max(1, pageHeight - verticalMargin * 2);
+  const linePitch = snapToLayoutPixel(availableBodyWidth / lines);
+  const fontSize = snapToLayoutPixel(availableBodyHeight / characters);
+  const bodyWidth = linePitch * lines;
+  const bodyHeight = fontSize * characters;
   return {
     pageWidth,
     pageHeight,

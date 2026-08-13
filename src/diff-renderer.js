@@ -19,6 +19,9 @@ let currentChangeIndex = -1;
 let syncingScroll = false;
 let currentState = null;
 let previewRenderFrame = null;
+let previewRenderToken = 0;
+let previewPagination = null;
+let currentPreviewSpread = 0;
 let proofPdfPreview = null;
 const proofPdfLayout = {
   marginTopMm: 10,
@@ -82,7 +85,48 @@ function previewSettings() {
   };
 }
 
+function afterPreviewLayout(callback) {
+  const fontsReady = document.fonts?.ready ?? Promise.resolve();
+  fontsReady.then(() => {
+    requestAnimationFrame(() => requestAnimationFrame(callback));
+  });
+}
+
+function updatePreviewSpread() {
+  if (!previewPagination) return;
+  const {
+    bodyWidth,
+    pageContents,
+    pageCount,
+    nextButton,
+    backButton,
+    pageState,
+  } = previewPagination;
+  const maximumSpread = Math.max(0, Math.ceil(pageCount / 2) - 1);
+  currentPreviewSpread = Math.max(
+    0,
+    Math.min(currentPreviewSpread, maximumSpread),
+  );
+  const rightPage = currentPreviewSpread * 2;
+  const leftPage = rightPage + 1;
+  pageContents[0].style.transform = `translateX(${rightPage * bodyWidth}px)`;
+  pageContents[1].style.transform = `translateX(${leftPage * bodyWidth}px)`;
+  pageContents[0].style.visibility =
+    rightPage < pageCount ? "visible" : "hidden";
+  pageContents[1].style.visibility =
+    leftPage < pageCount ? "visible" : "hidden";
+  nextButton.disabled = leftPage >= pageCount - 1;
+  backButton.disabled = rightPage === 0;
+  const lastVisiblePage = Math.min(leftPage + 1, pageCount);
+  pageState.textContent =
+    rightPage + 1 === lastVisiblePage
+      ? `${rightPage + 1} / ${pageCount}`
+      : `${rightPage + 1}–${lastVisiblePage} / ${pageCount}`;
+}
+
 function renderOldPreview(text) {
+  const renderToken = ++previewRenderToken;
+  previewPagination = null;
   proofPdfPreview = null;
   oldPreview.replaceChildren();
   if (!text) {
@@ -105,8 +149,8 @@ function renderOldPreview(text) {
     linePitch,
     fontSize,
   } = fixedSpreadPreviewLayout(settings);
-  const availableWidth = Math.max(1, oldPreview.clientWidth - 56);
-  const availableHeight = Math.max(1, oldPreview.clientHeight - 56);
+  const availableWidth = Math.max(1, oldPreview.clientWidth - 56 - 96);
+  const availableHeight = Math.max(1, oldPreview.clientHeight - 56 - 24);
   const previewScale = Math.min(
     1,
     availableWidth / (pageWidth * 2),
@@ -132,6 +176,23 @@ function renderOldPreview(text) {
 
   const html = renderPreviewDocument(text);
   const pageContents = [];
+  const reader = document.createElement("div");
+  reader.className = "preview-reader";
+  const nextButton = document.createElement("button");
+  nextButton.className = "preview-turn preview-turn-next";
+  nextButton.type = "button";
+  nextButton.textContent = "‹";
+  nextButton.disabled = true;
+  nextButton.setAttribute("aria-label", "次の見開き");
+  const backButton = document.createElement("button");
+  backButton.className = "preview-turn preview-turn-back";
+  backButton.type = "button";
+  backButton.textContent = "›";
+  backButton.disabled = true;
+  backButton.setAttribute("aria-label", "前の見開き");
+  const pageState = document.createElement("div");
+  pageState.className = "preview-page-state";
+  pageState.textContent = "1 / …";
   const spreadFrame = document.createElement("div");
   spreadFrame.className = "preview-spread-frame";
   spreadFrame.style.width = `${pageWidth * 2 * previewScale}px`;
@@ -155,18 +216,42 @@ function renderOldPreview(text) {
     pageContents[pageIndex] = content;
   }
   spreadFrame.append(spread);
-  oldPreview.append(spreadFrame);
+  reader.append(nextButton, spreadFrame, backButton, pageState);
+  oldPreview.append(reader);
 
-  pageContents[0].style.transform = "translateX(0)";
-  pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
-  proofPdfPreview = {
-    bodyWidth,
-    pageWidth,
-    pageHeight,
-    pageCount: previewPageCount(pageContents[0].scrollWidth, bodyWidth),
-    template: pageContents[0].closest(".preview-page"),
+  nextButton.onclick = () => {
+    currentPreviewSpread += 1;
+    updatePreviewSpread();
   };
-  updateProofPdfButton();
+  backButton.onclick = () => {
+    currentPreviewSpread -= 1;
+    updatePreviewSpread();
+  };
+  afterPreviewLayout(() => {
+    if (renderToken !== previewRenderToken) return;
+    const pageCount = previewPageCount(
+      pageContents[0].scrollWidth,
+      bodyWidth,
+      1,
+    );
+    previewPagination = {
+      bodyWidth,
+      pageContents,
+      pageCount,
+      nextButton,
+      backButton,
+      pageState,
+    };
+    updatePreviewSpread();
+    proofPdfPreview = {
+      bodyWidth,
+      pageWidth,
+      pageHeight,
+      pageCount,
+      template: pageContents[0].closest(".preview-page"),
+    };
+    updateProofPdfButton();
+  });
 }
 
 function updateProofPdfButton() {
@@ -458,7 +543,9 @@ $("previousChange").onclick = () => focusChange(currentChangeIndex - 1);
 $("nextChange").onclick = () => focusChange(currentChangeIndex + 1);
 
 function applyState(comparison) {
+  const previousLeftPath = currentState?.left?.path;
   currentState = comparison;
+  if (comparison.left?.path !== previousLeftPath) currentPreviewSpread = 0;
   proofPdfPreview = null;
   updateProofPdfButton();
   if (viewMode === "preview") scheduleOldPreviewRender();
