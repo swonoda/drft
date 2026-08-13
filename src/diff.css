@@ -226,14 +226,10 @@ body {
 
 .old-preview {
   display: grid;
-  grid-template-columns: repeat(
-    2,
-    minmax(280px, var(--diff-preview-page-width, 520px))
-  );
-  justify-content: center;
-  gap: 0;
+  place-items: center;
   min-height: 100%;
   padding: 28px;
+  overflow: auto;
   background: #fff;
 }
 
@@ -241,11 +237,25 @@ body {
   display: none;
 }
 
+.preview-spread-frame {
+  position: relative;
+  flex: none;
+}
+
+.preview-spread {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(2, var(--diff-preview-page-width));
+  transform-origin: top left;
+}
+
 .preview-page {
   position: relative;
-  width: min(var(--diff-preview-page-width, 520px), 100%);
-  height: min(var(--diff-preview-page-height, 730px), calc(100vh - 185px));
-  min-height: 560px;
+  width: var(--diff-preview-page-width, 561px);
+  height: var(--diff-preview-page-height, 794px);
+  min-height: 0;
   padding: 0;
   overflow: hidden;
   border: 0;
@@ -275,7 +285,7 @@ body {
   top: var(--diff-preview-vertical-margin, 32px);
   right: var(--diff-preview-horizontal-margin, 32px);
   width: var(--diff-preview-body-width);
-  height: calc(100% - var(--diff-preview-vertical-margin, 32px) * 2);
+  height: var(--diff-preview-body-height);
   overflow: hidden;
 }
 

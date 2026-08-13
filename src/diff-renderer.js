@@ -1,8 +1,7 @@
 import { renderPreviewDocument } from "./parser.js";
 import {
-  previewPageBodyWidth,
+  fixedSpreadPreviewLayout,
   previewPageCount,
-  previewPageFrame,
 } from "./preview-layout.js";
 
 const $ = (id) => document.getElementById(id);
@@ -70,13 +69,16 @@ function previewSettings() {
       localStorage.getItem("diffPreview.font") ||
       localStorage.getItem("display.font") ||
       "Yu Mincho, YuMincho, serif",
-    fontSize: Number(localStorage.getItem("display.fontSize")) || 18,
-    letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0,
-    lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.75,
-    charactersPerLine: Number(localStorage.getItem("display.lineChars")) || 40,
-    linesPerPage: Number(localStorage.getItem("display.previewLines")) || 16,
-    verticalMargin: storedNumber("diffPreview.verticalMargin", 32),
-    horizontalMargin: storedNumber("diffPreview.horizontalMargin", 32),
+    charactersPerLine: storedNumber(
+      "diffPreview.charactersPerLine",
+      Number(localStorage.getItem("display.lineChars")) || 40,
+    ),
+    linesPerPage: storedNumber(
+      "diffPreview.linesPerPage",
+      Number(localStorage.getItem("display.previewLines")) || 16,
+    ),
+    verticalMarginMm: storedNumber("diffPreview.verticalMarginMm", 15),
+    horizontalMarginMm: storedNumber("diffPreview.horizontalMarginMm", 15),
   };
 }
 
@@ -93,49 +95,52 @@ function renderOldPreview(text) {
   }
 
   const settings = previewSettings();
-  const bodyWidth = previewPageBodyWidth(
-    settings.fontSize,
-    settings.lineHeight,
-    settings.linesPerPage,
-  );
-  const textHeight =
-    settings.charactersPerLine *
-    settings.fontSize *
-    (1 + settings.letterSpacing);
-  const { pageWidth, pageHeight } = previewPageFrame(
+  const {
+    pageWidth,
+    pageHeight,
     bodyWidth,
-    textHeight,
-    settings.verticalMargin,
-    settings.horizontalMargin,
+    bodyHeight,
+    verticalMargin,
+    horizontalMargin,
+    linePitch,
+    fontSize,
+  } = fixedSpreadPreviewLayout(settings);
+  const availableWidth = Math.max(1, oldPreview.clientWidth - 56);
+  const availableHeight = Math.max(1, oldPreview.clientHeight - 56);
+  const previewScale = Math.min(
+    1,
+    availableWidth / (pageWidth * 2),
+    availableHeight / pageHeight,
   );
   oldPreview.style.setProperty("--diff-preview-font", settings.font);
-  oldPreview.style.setProperty("--diff-preview-size", `${settings.fontSize}px`);
-  oldPreview.style.setProperty(
-    "--diff-preview-letter-spacing",
-    `${settings.letterSpacing}em`,
-  );
-  oldPreview.style.setProperty(
-    "--diff-preview-line-height",
-    String(settings.lineHeight),
-  );
-  oldPreview.style.setProperty(
-    "--diff-preview-line-pitch",
-    `${settings.fontSize * settings.lineHeight}px`,
-  );
+  oldPreview.style.setProperty("--diff-preview-size", `${fontSize}px`);
+  oldPreview.style.setProperty("--diff-preview-letter-spacing", "0em");
+  oldPreview.style.setProperty("--diff-preview-line-height", `${linePitch}px`);
+  oldPreview.style.setProperty("--diff-preview-line-pitch", `${linePitch}px`);
   oldPreview.style.setProperty("--diff-preview-body-width", `${bodyWidth}px`);
+  oldPreview.style.setProperty("--diff-preview-body-height", `${bodyHeight}px`);
   oldPreview.style.setProperty(
     "--diff-preview-vertical-margin",
-    `${Math.max(0, settings.verticalMargin)}px`,
+    `${verticalMargin}px`,
   );
   oldPreview.style.setProperty(
     "--diff-preview-horizontal-margin",
-    `${Math.max(0, settings.horizontalMargin)}px`,
+    `${horizontalMargin}px`,
   );
   oldPreview.style.setProperty("--diff-preview-page-width", `${pageWidth}px`);
   oldPreview.style.setProperty("--diff-preview-page-height", `${pageHeight}px`);
 
   const html = renderPreviewDocument(text);
   const pageContents = [];
+  const spreadFrame = document.createElement("div");
+  spreadFrame.className = "preview-spread-frame";
+  spreadFrame.style.width = `${pageWidth * 2 * previewScale}px`;
+  spreadFrame.style.height = `${pageHeight * previewScale}px`;
+  const spread = document.createElement("div");
+  spread.className = "preview-spread";
+  spread.style.width = `${pageWidth * 2}px`;
+  spread.style.height = `${pageHeight}px`;
+  spread.style.transform = `scale(${previewScale})`;
   for (const pageIndex of [1, 0]) {
     const page = document.createElement("article");
     page.className = "preview-page";
@@ -146,9 +151,11 @@ function renderOldPreview(text) {
     content.innerHTML = html;
     pageBody.append(content);
     page.append(pageBody);
-    oldPreview.append(page);
+    spread.append(page);
     pageContents[pageIndex] = content;
   }
+  spreadFrame.append(spread);
+  oldPreview.append(spreadFrame);
 
   pageContents[0].style.transform = "translateX(0)";
   pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
@@ -196,20 +203,30 @@ function setViewMode(mode) {
 function openLayoutDialog() {
   const settings = previewSettings();
   $("previewFont").value = settings.font;
-  $("previewVerticalMargin").value = settings.verticalMargin;
-  $("previewHorizontalMargin").value = settings.horizontalMargin;
+  $("previewVerticalMargin").value = settings.verticalMarginMm;
+  $("previewHorizontalMargin").value = settings.horizontalMarginMm;
+  $("previewLinesPerPage").value = settings.linesPerPage;
+  $("previewCharactersPerLine").value = settings.charactersPerLine;
   if (!layoutDialog.open) layoutDialog.show();
 }
 
 function saveLayoutSettings() {
   localStorage.setItem("diffPreview.font", $("previewFont").value.trim());
   localStorage.setItem(
-    "diffPreview.verticalMargin",
+    "diffPreview.verticalMarginMm",
     String(Math.max(0, Number($("previewVerticalMargin").value) || 0)),
   );
   localStorage.setItem(
-    "diffPreview.horizontalMargin",
+    "diffPreview.horizontalMarginMm",
     String(Math.max(0, Number($("previewHorizontalMargin").value) || 0)),
+  );
+  localStorage.setItem(
+    "diffPreview.linesPerPage",
+    String(Math.max(1, Number($("previewLinesPerPage").value) || 1)),
+  );
+  localStorage.setItem(
+    "diffPreview.charactersPerLine",
+    String(Math.max(1, Number($("previewCharactersPerLine").value) || 1)),
   );
   scheduleOldPreviewRender();
 }
@@ -219,6 +236,8 @@ for (const control of [
   $("previewFont"),
   $("previewVerticalMargin"),
   $("previewHorizontalMargin"),
+  $("previewLinesPerPage"),
+  $("previewCharactersPerLine"),
 ]) {
   control.addEventListener("input", saveLayoutSettings);
 }
@@ -510,3 +529,4 @@ try {
 
 $("diffViewButton").onclick = () => setViewMode("diff");
 $("oldPreviewButton").onclick = () => setViewMode("preview");
+window.addEventListener("resize", scheduleOldPreviewRender);

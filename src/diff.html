@@ -58,10 +58,10 @@
               id="previewVerticalMargin"
               type="number"
               min="0"
-              max="200"
-              step="1"
+              max="100"
+              step="0.5"
             />
-            <span>px</span>
+            <span>mm</span>
           </div>
           <label for="previewHorizontalMargin">左右余白</label>
           <div>
@@ -69,10 +69,32 @@
               id="previewHorizontalMargin"
               type="number"
               min="0"
-              max="200"
+              max="70"
+              step="0.5"
+            />
+            <span>mm</span>
+          </div>
+          <label for="previewLinesPerPage">1ページの行数</label>
+          <div>
+            <input
+              id="previewLinesPerPage"
+              type="number"
+              min="1"
+              max="60"
               step="1"
             />
-            <span>px</span>
+            <span>行</span>
+          </div>
+          <label for="previewCharactersPerLine">1行の文字数</label>
+          <div>
+            <input
+              id="previewCharactersPerLine"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+            />
+            <span>字</span>
           </div>
         </div>
       </form>
