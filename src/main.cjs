@@ -139,7 +139,20 @@ function openDictionaryWindow() {
   });
 }
 
-function openDiffWindow() {
+function currentDiffDocument(document) {
+  const filePath =
+    typeof document?.path === "string" && document.path ? document.path : null;
+  return {
+    name: filePath ? path.basename(filePath) : "現在の原稿（未保存）",
+    path: filePath,
+    text: typeof document?.text === "string" ? document.text : "",
+    encoding: document?.encoding === "shift_jis" ? "shift_jis" : "utf8",
+    current: true,
+  };
+}
+
+function openDiffWindow(document) {
+  const currentDocument = currentDiffDocument(document);
   const diffWin = new BrowserWindow({
     width: 1380,
     height: 860,
@@ -155,7 +168,8 @@ function openDiffWindow() {
     },
   });
   diffWin.setMenu(null);
-  diffWin.diffDocuments = { left: null, right: null };
+  diffWin.currentDocument = currentDocument;
+  diffWin.diffDocuments = { left: null, right: { ...currentDocument } };
   diffWindows.add(diffWin);
   diffWin.loadFile(path.join(__dirname, "diff.html"));
   diffWin.once("ready-to-show", () => diffWin.show());
@@ -287,7 +301,7 @@ function createMenu() {
       submenu: [
         {
           label: "ファイルを比較…",
-          click: openDiffWindow,
+          click: () => sendMenuCommand("compare"),
         },
         {
           label: "組版を調整…",
@@ -331,7 +345,10 @@ ipcMain.handle("file:analyzePdf", async () => {
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (result.canceled) return null;
-  return { path: result.filePaths[0], ...(await analyzePdfLayout(result.filePaths[0])) };
+  return {
+    path: result.filePaths[0],
+    ...(await analyzePdfLayout(result.filePaths[0])),
+  };
 });
 
 ipcMain.handle("file:open", async () => {
@@ -524,10 +541,11 @@ function diffWindowState(diffWin) {
   const fileInfo = (document) =>
     document
       ? {
-          name: path.basename(document.path),
-          path: document.path,
+          name: document.name || path.basename(document.path || ""),
+          path: document.path || "",
           encoding: document.encoding,
           text: document.text,
+          current: Boolean(document.current),
         }
       : null;
   return {
@@ -561,7 +579,47 @@ ipcMain.handle("diff:choose", async (event, side) => {
   if (result.canceled) return null;
   const file = result.filePaths[0];
   diffWin.diffDocuments[side] = {
+    name: path.basename(file),
     path: file,
+    current: false,
+    ...decodeText(await fs.readFile(file)),
+  };
+  return diffWindowState(diffWin);
+});
+
+ipcMain.handle("file:openDiff", (_event, document) => {
+  openDiffWindow(document);
+});
+
+ipcMain.handle("diff:chooseRightSource", async (event) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  if (!diffWin?.diffDocuments || !diffWin.currentDocument) {
+    throw new Error("比較ウィンドウを読み込めません");
+  }
+  const result = await dialog.showMessageBox(diffWin, {
+    type: "question",
+    message: "新しい原稿として使う内容を選択してください",
+    buttons: ["別のファイルを選択…", "現在の原稿を使用", "キャンセル"],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true,
+  });
+  if (result.response === 2) return null;
+  if (result.response === 1) {
+    diffWin.diffDocuments.right = { ...diffWin.currentDocument };
+    return diffWindowState(diffWin);
+  }
+  const selected = await dialog.showOpenDialog(diffWin, {
+    title: "新しいファイルを選択",
+    properties: ["openFile"],
+    filters: [{ name: "テキスト", extensions: ["txt"] }],
+  });
+  if (selected.canceled) return null;
+  const file = selected.filePaths[0];
+  diffWin.diffDocuments.right = {
+    name: path.basename(file),
+    path: file,
+    current: false,
     ...decodeText(await fs.readFile(file)),
   };
   return diffWindowState(diffWin);

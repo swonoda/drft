@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("desktop", {
   exportPdf: (html) => ipcRenderer.invoke("file:exportPdf", html),
   exportEpub: (book) => ipcRenderer.invoke("file:exportEpub", book),
   openDictionary: () => ipcRenderer.invoke("dictionary:open"),
+  openDiff: (document) => ipcRenderer.invoke("file:openDiff", document),
   onMenuCommand: (callback) =>
     ipcRenderer.on("menu:command", (_event, command) => callback(command)),
   analyzePdfLayout: () => ipcRenderer.invoke("file:analyzePdf"),

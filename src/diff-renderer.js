@@ -550,8 +550,9 @@ function applyState(comparison) {
   updateProofPdfButton();
   if (viewMode === "preview") scheduleOldPreviewRender();
   $("leftFile").textContent = comparison.left?.name ?? "古いファイルを選択…";
-  $("rightFile").textContent =
-    comparison.right?.name ?? "新しいファイルを選択…";
+  $("rightFile").textContent = comparison.right
+    ? `${comparison.right.name}${comparison.right.current ? "（現在の原稿）" : ""}`
+    : "新しいファイルを選択…";
   $("leftFile").title = comparison.left?.path ?? "";
   $("rightFile").title = comparison.right?.path ?? "";
   $("leftPath").textContent = comparison.left?.path ?? "";
@@ -605,8 +606,19 @@ async function chooseFile(side) {
   }
 }
 
+async function chooseRightSource() {
+  $("status").textContent = "新しい原稿を選択しています…";
+  try {
+    const comparison = await window.diffApi.chooseRightSource();
+    if (comparison) applyState(comparison);
+    else if (currentState) applyState(currentState);
+  } catch (error) {
+    $("status").textContent = `比較できません: ${error.message}`;
+  }
+}
+
 $("leftFile").onclick = () => chooseFile("left");
-$("rightFile").onclick = () => chooseFile("right");
+$("rightFile").onclick = chooseRightSource;
 
 try {
   applyState(await window.diffApi.load());
