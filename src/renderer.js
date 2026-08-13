@@ -553,6 +553,14 @@ async function exportEpub() {
   if (exportedPath) setState(`EPUB出力済み — ${exportedPath}`);
 }
 
+function openDiff() {
+  return window.desktop.openDiff({
+    path: filePath,
+    text: editor.value,
+    encoding,
+  });
+}
+
 window.desktop.onMenuCommand((command) => {
   if (typeof command === "object" && command.type === "dictionary-find") {
     findDictionaryHeading(command.heading);
@@ -566,6 +574,7 @@ window.desktop.onMenuCommand((command) => {
     snapshot: saveSnapshot,
     pdf: exportPdf,
     epub: exportEpub,
+    compare: openDiff,
     find: () => openFindDialog(false),
     replace: () => openFindDialog(true),
     "toggle-outline": toggleOutline,

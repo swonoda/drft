@@ -23,14 +23,82 @@
       </button>
       <div class="view-toggle" role="group" aria-label="表示切り替え">
         <button id="diffViewButton" class="active" type="button">差分</button>
-        <button id="oldPreviewButton" type="button">古いファイルの縦書き</button>
+        <button id="oldPreviewButton" type="button">
+          古いファイルの縦書き
+        </button>
       </div>
     </header>
     <main class="comparison">
       <pre class="document" id="leftDocument" tabindex="0"></pre>
       <pre class="document" id="rightDocument" tabindex="0"></pre>
-      <section class="old-preview" id="oldPreview" hidden aria-label="古いファイルの縦書きプレビュー"></section>
+      <section
+        class="old-preview"
+        id="oldPreview"
+        hidden
+        aria-label="古いファイルの縦書きプレビュー"
+      ></section>
     </main>
+    <button class="layout-button" id="layoutButton" type="button" hidden>
+      レイアウト調整
+    </button>
+    <dialog class="layout-dialog" id="layoutDialog">
+      <form method="dialog">
+        <div class="layout-dialog-head">
+          <h2>レイアウト調整</h2>
+          <button class="layout-dialog-close" type="submit" aria-label="閉じる">
+            ×
+          </button>
+        </div>
+        <label for="previewFont">フォント</label>
+        <input id="previewFont" type="text" spellcheck="false" />
+        <div class="layout-margin-fields">
+          <label for="previewVerticalMargin">上下余白</label>
+          <div>
+            <input
+              id="previewVerticalMargin"
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+            />
+            <span>mm</span>
+          </div>
+          <label for="previewHorizontalMargin">左右余白</label>
+          <div>
+            <input
+              id="previewHorizontalMargin"
+              type="number"
+              min="0"
+              max="70"
+              step="0.5"
+            />
+            <span>mm</span>
+          </div>
+          <label for="previewLinesPerPage">1ページの行数</label>
+          <div>
+            <input
+              id="previewLinesPerPage"
+              type="number"
+              min="1"
+              max="60"
+              step="1"
+            />
+            <span>行</span>
+          </div>
+          <label for="previewCharactersPerLine">1行の文字数</label>
+          <div>
+            <input
+              id="previewCharactersPerLine"
+              type="number"
+              min="1"
+              max="100"
+              step="1"
+            />
+            <span>字</span>
+          </div>
+        </div>
+      </form>
+    </dialog>
     <button class="proof-pdf-button" id="proofPdfButton" type="button" hidden>
       朱入り原稿PDF
     </button>
