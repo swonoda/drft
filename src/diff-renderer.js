@@ -252,13 +252,28 @@ function positionProofreadNotes(page) {
       const fontSize = parseFloat(
         getComputedStyle(insertion.item.node.parentElement).fontSize,
       );
-      const marker = document.createElement("span");
-      marker.className = "proofread-insert-marker";
-      marker.textContent = "※入ル";
-      marker.style.fontSize = `${fontSize * 0.48}px`;
-      marker.style.top = `${insertion.anchor.y}px`;
-      marker.style.left = `${insertion.anchor.x + fontSize * 0.12}px`;
-      layer.append(marker);
+      const arm = fontSize * 0.34;
+      const marker = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "polyline",
+      );
+      marker.classList.add("proofread-insert-caret");
+      marker.setAttribute(
+        "points",
+        [
+          `${insertion.anchor.x + arm},${insertion.anchor.y - arm}`,
+          `${insertion.anchor.x},${insertion.anchor.y}`,
+          `${insertion.anchor.x + arm},${insertion.anchor.y + arm}`,
+        ].join(" "),
+      );
+      leaderSvg.append(marker);
+      const markerLabel = document.createElement("span");
+      markerLabel.className = "proofread-insert-label";
+      markerLabel.textContent = "※入ル";
+      markerLabel.style.fontSize = `${fontSize * 0.48}px`;
+      markerLabel.style.top = `${insertion.anchor.y + arm}px`;
+      markerLabel.style.left = `${insertion.anchor.x + arm}px`;
+      layer.append(markerLabel);
 
       const note = document.createElement("span");
       note.className = "proofread-note proofread-note-add";

@@ -155,3 +155,52 @@ test("改行をまたぐ置き換えを行ごとの校正指示へ分ける", ()
     },
   ]);
 });
+
+test("別の文にある追加を前の文の削除へ割り当てない", () => {
+  const changes = buildProofreadChanges(
+    "甲を消す。次に進む。",
+    "甲。途中を足す。次に進む。",
+  );
+  assert.deepEqual(
+    changes.map(({ removed, replacement, type }) => ({
+      removed,
+      replacement,
+      type,
+    })),
+    [
+      { removed: "を消す", replacement: null, type: "delete" },
+      { removed: "", replacement: "途中を足す。", type: "add" },
+    ],
+  );
+});
+
+test("後続段落に変更があっても前段落の置換判定を変えない", () => {
+  const oldSample =
+    "あいうえお\n\nあいうえお\nかきくけこ\nさしすせそ\nたちつてと";
+  const newSample =
+    "あいうえお\n\nあお\nかき\nさし\nみはあさがいちばん\nでも食べるなら夜かな。";
+  const oldText = `${oldSample}\n\n良平りょうへいは歩く。トロッコは走る。`;
+  const newText = `${newSample}\n\n良平は歩く。トロッコは山を下るので走る。`;
+  const changes = buildProofreadChanges(oldText, newText);
+  assert.deepEqual(
+    changes
+      .filter((change) => ["すせそ", "たちつてと"].includes(change.removed))
+      .map(({ removed, replacement, type }) => ({
+        removed,
+        replacement,
+        type,
+      })),
+    [
+      {
+        removed: "すせそ",
+        replacement: "みはあさがいちばん",
+        type: "replace",
+      },
+      {
+        removed: "たちつてと",
+        replacement: "でも食べるなら夜かな。",
+        type: "replace",
+      },
+    ],
+  );
+});
