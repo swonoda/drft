@@ -10,6 +10,25 @@ export function previewPageCount(contentWidth, pageWidth) {
   return Math.max(1, Math.ceil(contentWidth / Math.max(1, pageWidth)));
 }
 
+export function previewPageFrame(
+  bodyWidth,
+  textHeight,
+  verticalMargin,
+  horizontalMargin,
+) {
+  const width = Number(bodyWidth);
+  const height = Number(textHeight);
+  const vertical = Number(verticalMargin);
+  const horizontal = Number(horizontalMargin);
+  if (![width, height, vertical, horizontal].every(Number.isFinite)) {
+    return { pageWidth: 1, pageHeight: 1 };
+  }
+  return {
+    pageWidth: Math.max(1, width + Math.max(0, horizontal) * 2),
+    pageHeight: Math.max(1, height + Math.max(0, vertical) * 2),
+  };
+}
+
 export function previewPageForOffset(offsetFromRight, pageWidth, pageCount) {
   return Math.max(
     0,

@@ -2,6 +2,7 @@ import { renderPreviewDocument } from "./parser.js";
 import {
   previewPageBodyWidth,
   previewPageCount,
+  previewPageFrame,
 } from "./preview-layout.js";
 
 const $ = (id) => document.getElementById(id);
@@ -9,6 +10,8 @@ const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
 const comparison = document.querySelector(".comparison");
 const oldPreview = $("oldPreview");
+const layoutButton = $("layoutButton");
+const layoutDialog = $("layoutDialog");
 const proofPdfButton = $("proofPdfButton");
 const proofPdfDialog = $("proofPdfDialog");
 let viewMode = "diff";
@@ -54,16 +57,26 @@ function renderParts(parts) {
   changeIds = [...new Set(parts.flatMap((part) => part.changeId ?? []))];
 }
 
+function storedNumber(key, fallback) {
+  const saved = localStorage.getItem(key);
+  if (saved === null) return fallback;
+  const value = Number(saved);
+  return Number.isFinite(value) ? value : fallback;
+}
 
 function previewSettings() {
   return {
     font:
-      localStorage.getItem("display.font") || "Yu Mincho, YuMincho, serif",
+      localStorage.getItem("diffPreview.font") ||
+      localStorage.getItem("display.font") ||
+      "Yu Mincho, YuMincho, serif",
     fontSize: Number(localStorage.getItem("display.fontSize")) || 18,
     letterSpacing: Number(localStorage.getItem("display.letterSpacing")) || 0,
     lineHeight: Number(localStorage.getItem("display.lineHeight")) || 1.75,
     charactersPerLine: Number(localStorage.getItem("display.lineChars")) || 40,
     linesPerPage: Number(localStorage.getItem("display.previewLines")) || 16,
+    verticalMargin: storedNumber("diffPreview.verticalMargin", 32),
+    horizontalMargin: storedNumber("diffPreview.horizontalMargin", 32),
   };
 }
 
@@ -85,11 +98,16 @@ function renderOldPreview(text) {
     settings.lineHeight,
     settings.linesPerPage,
   );
-  const pageHeight =
+  const textHeight =
     settings.charactersPerLine *
-      settings.fontSize *
-      (1 + settings.letterSpacing) +
-    64;
+    settings.fontSize *
+    (1 + settings.letterSpacing);
+  const { pageWidth, pageHeight } = previewPageFrame(
+    bodyWidth,
+    textHeight,
+    settings.verticalMargin,
+    settings.horizontalMargin,
+  );
   oldPreview.style.setProperty("--diff-preview-font", settings.font);
   oldPreview.style.setProperty("--diff-preview-size", `${settings.fontSize}px`);
   oldPreview.style.setProperty(
@@ -104,18 +122,17 @@ function renderOldPreview(text) {
     "--diff-preview-line-pitch",
     `${settings.fontSize * settings.lineHeight}px`,
   );
+  oldPreview.style.setProperty("--diff-preview-body-width", `${bodyWidth}px`);
   oldPreview.style.setProperty(
-    "--diff-preview-body-width",
-    `${bodyWidth}px`,
+    "--diff-preview-vertical-margin",
+    `${Math.max(0, settings.verticalMargin)}px`,
   );
   oldPreview.style.setProperty(
-    "--diff-preview-page-width",
-    `${bodyWidth + 64}px`,
+    "--diff-preview-horizontal-margin",
+    `${Math.max(0, settings.horizontalMargin)}px`,
   );
-  oldPreview.style.setProperty(
-    "--diff-preview-page-height",
-    `${pageHeight}px`,
-  );
+  oldPreview.style.setProperty("--diff-preview-page-width", `${pageWidth}px`);
+  oldPreview.style.setProperty("--diff-preview-page-height", `${pageHeight}px`);
 
   const html = renderPreviewDocument(text);
   const pageContents = [];
@@ -137,7 +154,7 @@ function renderOldPreview(text) {
   pageContents[1].style.transform = `translateX(${bodyWidth}px)`;
   proofPdfPreview = {
     bodyWidth,
-    pageWidth: bodyWidth + 64,
+    pageWidth,
     pageHeight,
     pageCount: previewPageCount(pageContents[0].scrollWidth, bodyWidth),
     template: pageContents[0].closest(".preview-page"),
@@ -170,8 +187,40 @@ function setViewMode(mode) {
   $("oldPreviewButton").classList.toggle("active", preview);
   $("diffViewButton").setAttribute("aria-pressed", String(!preview));
   $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
+  layoutButton.hidden = !preview;
+  if (!preview && layoutDialog.open) layoutDialog.close();
   if (preview) scheduleOldPreviewRender();
   updateProofPdfButton();
+}
+
+function openLayoutDialog() {
+  const settings = previewSettings();
+  $("previewFont").value = settings.font;
+  $("previewVerticalMargin").value = settings.verticalMargin;
+  $("previewHorizontalMargin").value = settings.horizontalMargin;
+  if (!layoutDialog.open) layoutDialog.show();
+}
+
+function saveLayoutSettings() {
+  localStorage.setItem("diffPreview.font", $("previewFont").value.trim());
+  localStorage.setItem(
+    "diffPreview.verticalMargin",
+    String(Math.max(0, Number($("previewVerticalMargin").value) || 0)),
+  );
+  localStorage.setItem(
+    "diffPreview.horizontalMargin",
+    String(Math.max(0, Number($("previewHorizontalMargin").value) || 0)),
+  );
+  scheduleOldPreviewRender();
+}
+
+layoutButton.onclick = openLayoutDialog;
+for (const control of [
+  $("previewFont"),
+  $("previewVerticalMargin"),
+  $("previewHorizontalMargin"),
+]) {
+  control.addEventListener("input", saveLayoutSettings);
 }
 
 function stylesheetText() {
@@ -192,19 +241,13 @@ function buildProofPdfHtml() {
   }
   const { bodyWidth, pageWidth, pageHeight, pageCount, template } =
     proofPdfPreview;
-  const {
-    marginTopMm,
-    marginRightMm,
-    marginBottomMm,
-    marginLeftMm,
-  } = proofPdfLayout;
+  const { marginTopMm, marginRightMm, marginBottomMm, marginLeftMm } =
+    proofPdfLayout;
   const pages = document.createElement("main");
   pages.className = "proof-pages";
   pages.style.cssText = oldPreview.style.cssText;
-  const availableWidth =
-    ((148 - marginRightMm - marginLeftMm) / 25.4) * 96;
-  const availableHeight =
-    ((210 - marginTopMm - marginBottomMm) / 25.4) * 96;
+  const availableWidth = ((148 - marginRightMm - marginLeftMm) / 25.4) * 96;
+  const availableHeight = ((210 - marginTopMm - marginBottomMm) / 25.4) * 96;
   const scale = Math.min(
     availableWidth / pageWidth,
     availableHeight / pageHeight,
@@ -464,7 +507,6 @@ try {
 } catch (error) {
   $("status").textContent = `比較できません: ${error.message}`;
 }
-
 
 $("diffViewButton").onclick = () => setViewMode("diff");
 $("oldPreviewButton").onclick = () => setViewMode("preview");

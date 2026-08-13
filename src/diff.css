@@ -187,7 +187,6 @@ body {
   text-align: right;
 }
 
-
 .view-toggle {
   grid-row: 1;
   grid-column: 2;
@@ -273,10 +272,10 @@ body {
 
 .preview-page-body {
   position: absolute;
-  top: 32px;
-  right: 32px;
+  top: var(--diff-preview-vertical-margin, 32px);
+  right: var(--diff-preview-horizontal-margin, 32px);
   width: var(--diff-preview-body-width);
-  height: calc(100% - 64px);
+  height: calc(100% - var(--diff-preview-vertical-margin, 32px) * 2);
   overflow: hidden;
 }
 
@@ -356,6 +355,113 @@ body {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+}
+
+.layout-button {
+  position: fixed;
+  left: 22px;
+  bottom: 44px;
+  z-index: 4;
+  padding: 9px 14px;
+  border: 1px solid #cbd5e8;
+  border-radius: 9px;
+  color: #405171;
+  background: #fff;
+  box-shadow: 0 4px 14px #26334b24;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.layout-button:hover {
+  border-color: #8095ca;
+  color: #405b91;
+}
+
+.layout-button[hidden] {
+  display: none;
+}
+
+.layout-dialog {
+  position: fixed;
+  inset: auto auto 88px 22px;
+  width: min(360px, calc(100vw - 44px));
+  max-height: calc(100vh - 150px);
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid #d8e0ef;
+  border-radius: 10px;
+  color: #26334b;
+  background: #fff;
+  box-shadow: 0 12px 36px #26334b30;
+}
+
+.layout-dialog form {
+  display: grid;
+  gap: 9px;
+}
+
+.layout-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.layout-dialog h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.layout-dialog label {
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.layout-dialog input {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #d8e0ef;
+  border-radius: 6px;
+  color: #26334b;
+  background: #fff;
+  font: inherit;
+}
+
+.layout-dialog-close {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #71809b;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.layout-dialog-close:hover {
+  background: #eef3fb;
+}
+
+.layout-margin-fields {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px 12px;
+  margin-top: 4px;
+}
+
+.layout-margin-fields > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  color: #8490a6;
+  font-size: 12px;
 }
 
 .proof-pdf-button:hover {

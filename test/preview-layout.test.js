@@ -5,6 +5,7 @@ import {
   previewPageCount,
   previewPageForOffset,
   editorMarginWithPreview,
+  previewPageFrame,
 } from "../src/preview-layout.js";
 
 test("指定行数から縦書きプレビューの本文幅を計算する", () => {
@@ -33,4 +34,15 @@ test("プレビュー幅の半分をエディタの左右余白から引く", ()
   assert.equal(editorMarginWithPreview(120, 400), 40);
   assert.equal(editorMarginWithPreview(120, 0), 120);
   assert.equal(editorMarginWithPreview(0, 0), 0);
+});
+
+test("本文サイズと上下左右余白から比較プレビューのページ寸法を作る", () => {
+  assert.deepEqual(previewPageFrame(504, 720, 40, 56), {
+    pageWidth: 616,
+    pageHeight: 800,
+  });
+  assert.deepEqual(previewPageFrame(504, 720, -10, -20), {
+    pageWidth: 504,
+    pageHeight: 720,
+  });
 });
