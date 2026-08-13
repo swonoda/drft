@@ -42,8 +42,7 @@ test("改行コードを揃えて比較する", () => {
 });
 
 test("削除をトル指定用の範囲へ変換する", () => {
-  const parts = buildDiffParts("白熊が歩く。", "白熊が。");
-  assert.deepEqual(buildProofreadChanges(parts), [
+  assert.deepEqual(buildProofreadChanges("白熊が歩く。", "白熊が。"), [
     {
       id: 1,
       start: 3,
@@ -56,8 +55,7 @@ test("削除をトル指定用の範囲へ変換する", () => {
 });
 
 test("隣接する削除と追加を置き換え指定へ変換する", () => {
-  const parts = buildDiffParts("氷が光る。", "雪が光る。");
-  assert.deepEqual(buildProofreadChanges(parts), [
+  assert.deepEqual(buildProofreadChanges("氷が光る。", "雪が光る。"), [
     {
       id: 1,
       start: 0,
@@ -70,6 +68,46 @@ test("隣接する削除と追加を置き換え指定へ変換する", () => {
 });
 
 test("追加だけの変更は削除・置き換え指定に含めない", () => {
-  const parts = buildDiffParts("白熊。", "大きな白熊。");
-  assert.deepEqual(buildProofreadChanges(parts), []);
+  assert.deepEqual(buildProofreadChanges("白熊。", "大きな白熊。"), []);
+});
+
+test("改行をまたぐ置き換えを行ごとの校正指示へ分ける", () => {
+  const oldText =
+    "あいうえお\n\nあいうえお\nかきくけこ\nさしすせそ\nたちつてと";
+  const newText =
+    "あいうえお\n\nあお\nかき\nさし\nみはあさがいちばん\nでも食べるなら夜かな。";
+  assert.deepEqual(buildProofreadChanges(oldText, newText), [
+    {
+      id: 1,
+      start: 8,
+      end: 11,
+      removed: "いうえ",
+      replacement: null,
+      type: "delete",
+    },
+    {
+      id: 2,
+      start: 15,
+      end: 18,
+      removed: "くけこ",
+      replacement: null,
+      type: "delete",
+    },
+    {
+      id: 3,
+      start: 21,
+      end: 24,
+      removed: "すせそ",
+      replacement: "みはあさがいちばん",
+      type: "replace",
+    },
+    {
+      id: 4,
+      start: 25,
+      end: 30,
+      removed: "たちつてと",
+      replacement: "でも食べるなら夜かな。",
+      type: "replace",
+    },
+  ]);
 });

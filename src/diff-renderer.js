@@ -164,6 +164,7 @@ function positionProofreadNotes(page) {
     `0 0 ${page.offsetWidth} ${page.offsetHeight}`,
   );
   layer.append(leaderSvg);
+  let leaderIndex = 0;
   for (const change of changes) {
     const first = nodes.find((item) => change.start < item.end);
     const last = [...nodes].reverse().find((item) => change.end > item.start);
@@ -223,12 +224,37 @@ function positionProofreadNotes(page) {
     };
     const leader = document.createElementNS(
       "http://www.w3.org/2000/svg",
-      "line",
+      "polyline",
     );
-    leader.setAttribute("x1", anchor.x);
-    leader.setAttribute("y1", anchor.y);
-    leader.setAttribute("x2", destination.x);
-    leader.setAttribute("y2", destination.y);
+    const laneNumber = Math.ceil(leaderIndex / 2);
+    const laneOffset = laneNumber * 5 * (leaderIndex % 2 ? -1 : 1);
+    leaderIndex++;
+    const deltaX = Math.abs(destination.x - anchor.x);
+    const deltaY = Math.abs(destination.y - anchor.y);
+    const points =
+      deltaX >= deltaY
+        ? [
+            anchor,
+            { x: (anchor.x + destination.x) / 2 + laneOffset, y: anchor.y },
+            {
+              x: (anchor.x + destination.x) / 2 + laneOffset,
+              y: destination.y,
+            },
+            destination,
+          ]
+        : [
+            anchor,
+            { x: anchor.x, y: (anchor.y + destination.y) / 2 + laneOffset },
+            {
+              x: destination.x,
+              y: (anchor.y + destination.y) / 2 + laneOffset,
+            },
+            destination,
+          ];
+    leader.setAttribute(
+      "points",
+      points.map((point) => `${point.x},${point.y}`).join(" "),
+    );
     leaderSvg.append(leader);
   }
   page.append(layer);

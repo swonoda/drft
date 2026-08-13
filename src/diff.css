@@ -503,7 +503,8 @@ body {
   overflow: visible;
 }
 
-.proofread-leaders line {
+.proofread-leaders polyline {
+  fill: none;
   stroke: #d34f5b;
   stroke-width: 1.25;
   vector-effect: non-scaling-stroke;

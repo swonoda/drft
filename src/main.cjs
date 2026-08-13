@@ -569,7 +569,10 @@ function diffWindowState(diffWin) {
     left: fileInfo(documents.left),
     right: fileInfo(documents.right),
     parts,
-    proofreadChanges: parts ? buildProofreadChanges(parts) : [],
+    proofreadChanges:
+      documents.left && documents.right
+        ? buildProofreadChanges(documents.left.text, documents.right.text)
+        : [],
   };
 }
 
