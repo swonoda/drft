@@ -248,7 +248,6 @@ function renderOldPreview(text) {
       pageWidth,
       pageHeight,
       pageCount,
-      template: pageContents[0].closest(".preview-page"),
     };
     updateProofPdfButton();
   });
@@ -340,11 +339,11 @@ function stylesheetText() {
 }
 
 function buildProofPdfHtml() {
-  if (!proofPdfPreview?.template) {
+  const displayedPage = oldPreview.querySelector(".preview-page:last-child");
+  if (!proofPdfPreview || !displayedPage) {
     throw new Error("縦書きプレビューを表示してください");
   }
-  const { bodyWidth, pageWidth, pageHeight, pageCount, template } =
-    proofPdfPreview;
+  const { bodyWidth, pageWidth, pageHeight, pageCount } = proofPdfPreview;
   const { marginTopMm, marginRightMm, marginBottomMm, marginLeftMm } =
     proofPdfLayout;
   const pages = document.createElement("main");
@@ -366,8 +365,9 @@ function buildProofPdfHtml() {
 
   const sheet = document.createElement("section");
   sheet.className = "proof-sheet";
-  const page = template.cloneNode(true);
+  const page = displayedPage.cloneNode(true);
   page.classList.add("proof-page");
+  page.style.visibility = "visible";
   page.querySelector(".preview-page-content").style.transform =
     "translateX(var(--proof-content-offset))";
   const frame = document.createElement("div");
