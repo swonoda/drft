@@ -529,6 +529,17 @@ body {
   writing-mode: vertical-rl;
 }
 
+.proofread-insert-marker {
+  position: absolute;
+  color: #d34f5b;
+  font-family: var(--diff-preview-font);
+  font-weight: 400;
+  line-height: 1;
+  text-orientation: upright;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
 .proof-pdf-button {
   position: fixed;
   right: 22px;

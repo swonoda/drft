@@ -80,10 +80,15 @@ function lineChanges(leftLine, rightLine) {
   const result = [];
   let offset = leftLine.start;
   let current = null;
+  const pushCurrent = () => {
+    if (current && (current.removed || current.replacement)) {
+      result.push(current);
+    }
+    current = null;
+  };
   for (const part of diffChars(leftLine.text, rightLine.text)) {
     if (!part.added && !part.removed) {
-      if (current?.removed) result.push(current);
-      current = null;
+      pushCurrent();
       offset += part.value.length;
       continue;
     }
@@ -94,7 +99,7 @@ function lineChanges(leftLine, rightLine) {
       current.end = offset;
     } else current.replacement += part.value;
   }
-  if (current?.removed) result.push(current);
+  pushCurrent();
   return result;
 }
 
@@ -115,6 +120,19 @@ function buildProofreadChanges(left, right) {
     const removed = part.removed ? part : null;
     const addedIndex = index + (removed ? 1 : 0);
     const added = lineDiff[addedIndex]?.added ? lineDiff[addedIndex] : null;
+    if (!removed && added) {
+      for (const line of blockLines(added.value)) {
+        if (!line.text) continue;
+        deletions.push({
+          start: leftOffset,
+          end: leftOffset,
+          removed: "",
+          replacement: line.text,
+        });
+      }
+      index++;
+      continue;
+    }
     if (!removed) {
       index++;
       continue;
@@ -151,16 +169,31 @@ function buildProofreadChanges(left, right) {
     available.forEach((change, additionIndex) => {
       change.replacement = additions[additionIndex] || "";
     });
+    for (const addition of additions.slice(available.length)) {
+      blockDeletions.push({
+        start: leftOffset + removed.value.length,
+        end: leftOffset + removed.value.length,
+        removed: "",
+        replacement: addition,
+      });
+    }
     deletions.push(...blockDeletions);
     leftOffset += removed.value.length;
     index += added ? 2 : 1;
   }
-  return deletions.map((change, changeIndex) => ({
-    id: changeIndex + 1,
-    ...change,
-    replacement: change.replacement || null,
-    type: change.replacement ? "replace" : "delete",
-  }));
+  return deletions
+    .sort(
+      (a, b) =>
+        a.start - b.start ||
+        a.end - b.end ||
+        Number(Boolean(b.removed)) - Number(Boolean(a.removed)),
+    )
+    .map((change, changeIndex) => ({
+      id: changeIndex + 1,
+      ...change,
+      replacement: change.replacement || null,
+      type: !change.removed ? "add" : change.replacement ? "replace" : "delete",
+    }));
 }
 
 module.exports = { buildDiffParts, buildProofreadChanges };

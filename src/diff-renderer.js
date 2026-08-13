@@ -104,11 +104,14 @@ function visibleProofreadChanges(text, changes) {
       start: manuscriptText(normalized.slice(0, change.start)).length,
       end: manuscriptText(normalized.slice(0, change.end)).length,
       note:
-        change.type === "replace"
+        change.type === "replace" || change.type === "add"
           ? manuscriptText(change.replacement || "")
           : "トル",
     }))
-    .filter((change) => change.end > change.start && change.note);
+    .filter(
+      (change) =>
+        change.note && (change.type === "add" || change.end > change.start),
+    );
 }
 
 function applyProofreadChanges(container, text, changes) {
@@ -168,7 +171,117 @@ function positionProofreadNotes(page) {
   );
   layer.append(leaderSvg);
   let leaderIndex = 0;
+  const appendLeader = (anchor, position) => {
+    const destination = {
+      x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
+      y: Math.max(position.y, Math.min(position.y + position.height, anchor.y)),
+    };
+    const leader = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "polyline",
+    );
+    const laneNumber = Math.ceil(leaderIndex / 2);
+    const laneOffset = laneNumber * 5 * (leaderIndex % 2 ? -1 : 1);
+    leaderIndex++;
+    const deltaX = Math.abs(destination.x - anchor.x);
+    const deltaY = Math.abs(destination.y - anchor.y);
+    const points =
+      deltaX >= deltaY
+        ? [
+            anchor,
+            { x: (anchor.x + destination.x) / 2 + laneOffset, y: anchor.y },
+            {
+              x: (anchor.x + destination.x) / 2 + laneOffset,
+              y: destination.y,
+            },
+            destination,
+          ]
+        : [
+            anchor,
+            { x: anchor.x, y: (anchor.y + destination.y) / 2 + laneOffset },
+            {
+              x: destination.x,
+              y: (anchor.y + destination.y) / 2 + laneOffset,
+            },
+            destination,
+          ];
+    leader.setAttribute(
+      "points",
+      points.map((point) => `${point.x},${point.y}`).join(" "),
+    );
+    leaderSvg.append(leader);
+  };
+  const insertionPoint = (changeOffset) => {
+    const item =
+      nodes.find(
+        (candidate) =>
+          changeOffset >= candidate.start && changeOffset < candidate.end,
+      ) || nodes.at(-1);
+    if (!item || !item.node.data.length) return null;
+    const localOffset = Math.max(
+      0,
+      Math.min(changeOffset - item.start, item.node.data.length),
+    );
+    const range = document.createRange();
+    const afterCharacter = localOffset >= item.node.data.length;
+    if (afterCharacter) {
+      range.setStart(item.node, item.node.data.length - 1);
+      range.setEnd(item.node, item.node.data.length);
+    } else {
+      range.setStart(item.node, localOffset);
+      range.setEnd(item.node, localOffset + 1);
+    }
+    const rect = [...range.getClientRects()].find(visible);
+    if (!rect) return null;
+    const pageCharacterRect = toPageRect(rect);
+    return {
+      item,
+      anchor: {
+        x: pageCharacterRect.x + pageCharacterRect.width / 2,
+        y: afterCharacter
+          ? pageCharacterRect.y + pageCharacterRect.height
+          : pageCharacterRect.y,
+      },
+      characterRect: pageCharacterRect,
+    };
+  };
   for (const change of changes) {
+    if (change.type === "add") {
+      const insertion = insertionPoint(change.start);
+      if (!insertion) continue;
+      const fontSize = parseFloat(
+        getComputedStyle(insertion.item.node.parentElement).fontSize,
+      );
+      const marker = document.createElement("span");
+      marker.className = "proofread-insert-marker";
+      marker.textContent = "※入ル";
+      marker.style.fontSize = `${fontSize * 0.48}px`;
+      marker.style.top = `${insertion.anchor.y}px`;
+      marker.style.left = `${insertion.anchor.x + fontSize * 0.12}px`;
+      layer.append(marker);
+
+      const note = document.createElement("span");
+      note.className = "proofread-note proofread-note-add";
+      note.textContent = `※${change.note}`;
+      note.style.fontSize = `${fontSize}px`;
+      const position = findProofreadNotePosition({
+        pageWidth: page.offsetWidth,
+        pageHeight: page.offsetHeight,
+        noteWidth: fontSize * 1.15,
+        noteHeight: Math.max(fontSize, [...note.textContent].length * fontSize),
+        anchor: insertion.anchor,
+        occupied,
+        gap: Math.max(3, fontSize * 0.2),
+        step: Math.max(4, fontSize * 0.35),
+      });
+      note.style.top = `${position.y}px`;
+      note.style.left = `${position.x}px`;
+      layer.append(note);
+      occupied.push(position);
+      appendLeader(insertion.anchor, position);
+      continue;
+    }
+
     const first = nodes.find((item) => change.start < item.end);
     const last = [...nodes].reverse().find((item) => change.end > item.start);
     if (!first || !last) continue;
@@ -241,44 +354,7 @@ function positionProofreadNotes(page) {
     note.style.left = `${position.x}px`;
     layer.append(note);
     occupied.push(position);
-    const destination = {
-      x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
-      y: Math.max(position.y, Math.min(position.y + position.height, anchor.y)),
-    };
-    const leader = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "polyline",
-    );
-    const laneNumber = Math.ceil(leaderIndex / 2);
-    const laneOffset = laneNumber * 5 * (leaderIndex % 2 ? -1 : 1);
-    leaderIndex++;
-    const deltaX = Math.abs(destination.x - anchor.x);
-    const deltaY = Math.abs(destination.y - anchor.y);
-    const points =
-      deltaX >= deltaY
-        ? [
-            anchor,
-            { x: (anchor.x + destination.x) / 2 + laneOffset, y: anchor.y },
-            {
-              x: (anchor.x + destination.x) / 2 + laneOffset,
-              y: destination.y,
-            },
-            destination,
-          ]
-        : [
-            anchor,
-            { x: anchor.x, y: (anchor.y + destination.y) / 2 + laneOffset },
-            {
-              x: destination.x,
-              y: (anchor.y + destination.y) / 2 + laneOffset,
-            },
-            destination,
-          ];
-    leader.setAttribute(
-      "points",
-      points.map((point) => `${point.x},${point.y}`).join(" "),
-    );
-    leaderSvg.append(leader);
+    appendLeader(anchor, position);
   }
   page.append(layer);
 }

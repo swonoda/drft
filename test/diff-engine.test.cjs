@@ -67,8 +67,52 @@ test("隣接する削除と追加を置き換え指定へ変換する", () => {
   ]);
 });
 
-test("追加だけの変更は削除・置き換え指定に含めない", () => {
-  assert.deepEqual(buildProofreadChanges("白熊。", "大きな白熊。"), []);
+test("追加だけの変更は文字間への挿入指示へ変換する", () => {
+  assert.deepEqual(buildProofreadChanges("白熊。", "大きな白熊。"), [
+    {
+      id: 1,
+      start: 0,
+      end: 0,
+      removed: "",
+      replacement: "大きな",
+      type: "add",
+    },
+  ]);
+});
+
+test("文中への追加は前後の文字間を挿入位置にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "トロッコは人手を借りずに走る。",
+      "トロッコは山を下くだるのだから、人手を借りずに走る。",
+    ),
+    [
+      {
+        id: 1,
+        start: 5,
+        end: 5,
+        removed: "",
+        replacement: "山を下くだるのだから、",
+        type: "add",
+      },
+    ],
+  );
+});
+
+test("追加された行は直前の行と直後の行の間を挿入位置にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges("前の行\n後の行", "前の行\n追加する行\n後の行"),
+    [
+      {
+        id: 1,
+        start: 4,
+        end: 4,
+        removed: "",
+        replacement: "追加する行",
+        type: "add",
+      },
+    ],
+  );
 });
 
 test("改行をまたぐ置き換えを行ごとの校正指示へ分ける", () => {
