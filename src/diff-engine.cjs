@@ -1,4 +1,4 @@
-const { diffWordsWithSpace } = require("diff");
+const { diffChars, diffWordsWithSpace } = require("diff");
 
 function buildDiffParts(left, right) {
   const changes = diffWordsWithSpace(
@@ -22,4 +22,191 @@ function buildDiffParts(left, right) {
   });
 }
 
-module.exports = { buildDiffParts };
+function lineSimilarity(left, right) {
+  const minimum = Math.min(left.length, right.length);
+  if (!minimum) return left === right ? 1 : 0;
+  const common = diffChars(left, right)
+    .filter((part) => !part.added && !part.removed)
+    .reduce((length, part) => length + part.value.length, 0);
+  return common / minimum;
+}
+
+function lineChanges(leftLine, rightLine) {
+  const result = [];
+  let offset = leftLine.start;
+  let current = null;
+  const pushCurrent = () => {
+    if (current && (current.removed || current.replacement)) {
+      result.push(current);
+    }
+    current = null;
+  };
+  for (const part of diffChars(leftLine.text, rightLine.text)) {
+    if (!part.added && !part.removed) {
+      pushCurrent();
+      offset += part.value.length;
+      continue;
+    }
+    current ||= { start: offset, end: offset, removed: "", replacement: "" };
+    if (part.removed) {
+      current.removed += part.value;
+      offset += part.value.length;
+      current.end = offset;
+    } else current.replacement += part.value;
+  }
+  pushCurrent();
+  return result;
+}
+
+function comparisonUnits(text) {
+  const units = [];
+  const closingMarks = new Set([
+    "」",
+    "』",
+    "）",
+    "】",
+    "〕",
+    "〉",
+    "》",
+    "”",
+    "’",
+  ]);
+  const pushUnit = (rawStart, rawEnd) => {
+    let start = rawStart;
+    let end = rawEnd;
+    while (start < end && text[start] === "\n") start++;
+    while (end > start && text[end - 1] === "\n") end--;
+    if (start < end) units.push({ text: text.slice(start, end), start, end });
+  };
+  let start = 0;
+  let index = 0;
+  while (index < text.length) {
+    if (text[index] === "\n") {
+      pushUnit(start, index);
+      while (text[index] === "\n") index++;
+      start = index;
+      continue;
+    }
+    if (/[。！？!?]/u.test(text[index])) {
+      index++;
+      while (index < text.length && closingMarks.has(text[index])) index++;
+      pushUnit(start, index);
+      start = index;
+      continue;
+    }
+    index++;
+  }
+  pushUnit(start, text.length);
+  return units;
+}
+
+function alignRelatedUnits(leftUnits, rightUnits) {
+  const table = Array.from({ length: leftUnits.length + 1 }, () =>
+    Array(rightUnits.length + 1).fill(0),
+  );
+  const similarity = (leftIndex, rightIndex) =>
+    lineSimilarity(leftUnits[leftIndex].text, rightUnits[rightIndex].text);
+  for (let i = 1; i <= leftUnits.length; i++) {
+    for (let j = 1; j <= rightUnits.length; j++) {
+      const score = similarity(i - 1, j - 1);
+      table[i][j] = Math.max(
+        table[i - 1][j],
+        table[i][j - 1],
+        score >= 0.35 ? table[i - 1][j - 1] + score : -1,
+      );
+    }
+  }
+  const pairs = [];
+  let i = leftUnits.length;
+  let j = rightUnits.length;
+  while (i && j) {
+    const score = similarity(i - 1, j - 1);
+    if (
+      score >= 0.35 &&
+      Math.abs(table[i][j] - (table[i - 1][j - 1] + score)) < 1e-9
+    ) {
+      pairs.unshift([i - 1, j - 1]);
+      i--;
+      j--;
+    } else if (table[i - 1][j] >= table[i][j - 1]) i--;
+    else j--;
+  }
+  return pairs;
+}
+
+function buildProofreadChanges(left, right) {
+  const normalizedLeft = left.replaceAll("\r\n", "\n");
+  const normalizedRight = right.replaceAll("\r\n", "\n");
+  const leftUnits = comparisonUnits(normalizedLeft);
+  const rightUnits = comparisonUnits(normalizedRight);
+  const anchors = alignRelatedUnits(leftUnits, rightUnits);
+  const changes = [];
+  let previousLeft = -1;
+  let previousRight = -1;
+  const processPair = (leftIndex, rightIndex) => {
+    const leftUnit = leftUnits[leftIndex];
+    const rightUnit = rightUnits[rightIndex];
+    changes.push(...lineChanges(leftUnit, rightUnit));
+  };
+  const processGap = (nextLeft, nextRight) => {
+    const leftGap = [];
+    const rightGap = [];
+    for (let index = previousLeft + 1; index < nextLeft; index++) {
+      leftGap.push(index);
+    }
+    for (let index = previousRight + 1; index < nextRight; index++) {
+      rightGap.push(index);
+    }
+    const paired = Math.min(leftGap.length, rightGap.length);
+    for (let index = 0; index < paired; index++) {
+      processPair(leftGap[index], rightGap[index]);
+    }
+    for (const leftIndex of leftGap.slice(paired)) {
+      const unit = leftUnits[leftIndex];
+      changes.push({
+        start: unit.start,
+        end: unit.end,
+        removed: unit.text,
+        replacement: "",
+      });
+    }
+    const insertionOffset =
+      nextLeft < leftUnits.length
+        ? leftUnits[nextLeft].start
+        : previousLeft >= 0
+          ? leftUnits[previousLeft].end
+          : 0;
+    for (const rightIndex of rightGap.slice(paired)) {
+      changes.push({
+        start: insertionOffset,
+        end: insertionOffset,
+        removed: "",
+        replacement: rightUnits[rightIndex].text,
+      });
+    }
+  };
+
+  for (const [leftIndex, rightIndex] of anchors) {
+    processGap(leftIndex, rightIndex);
+    processPair(leftIndex, rightIndex);
+    previousLeft = leftIndex;
+    previousRight = rightIndex;
+  }
+  processGap(leftUnits.length, rightUnits.length);
+
+  return changes
+    .sort(
+      (a, b) =>
+        a.start - b.start ||
+        a.end - b.end ||
+        Number(Boolean(b.removed)) - Number(Boolean(a.removed)),
+    )
+    .map((change, changeIndex) => ({
+      id: changeIndex + 1,
+      ...change,
+      replacement: change.replacement || null,
+      type: !change.removed ? "add" : change.replacement ? "replace" : "delete",
+    }));
+}
+
+module.exports = { buildDiffParts, buildProofreadChanges };
