@@ -267,17 +267,10 @@ function positionProofreadNotes(page) {
         ].join(" "),
       );
       leaderSvg.append(marker);
-      const markerLabel = document.createElement("span");
-      markerLabel.className = "proofread-insert-label";
-      markerLabel.textContent = "※入ル";
-      markerLabel.style.fontSize = `${fontSize * 0.48}px`;
-      markerLabel.style.top = `${insertion.anchor.y + arm}px`;
-      markerLabel.style.left = `${insertion.anchor.x + arm}px`;
-      layer.append(markerLabel);
 
       const note = document.createElement("span");
       note.className = "proofread-note proofread-note-add";
-      note.textContent = `※${change.note}`;
+      note.textContent = change.note;
       note.style.fontSize = `${fontSize}px`;
       const position = findProofreadNotePosition({
         pageWidth: page.offsetWidth,
