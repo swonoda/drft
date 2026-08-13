@@ -216,8 +216,13 @@ body {
 }
 
 .comparison.preview-mode {
-  display: block;
-  overflow: auto;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.comparison.preview-mode:has(.layout-sidebar:not(.is-collapsed)) {
+  grid-template-columns: 286px minmax(0, 1fr);
 }
 
 .comparison.preview-mode > .document {
@@ -225,12 +230,86 @@ body {
 }
 
 .old-preview {
+  grid-column: 2;
   display: grid;
   place-items: center;
   min-height: 100%;
   padding: 28px;
   overflow: auto;
   background: #fff;
+}
+
+.layout-sidebar {
+  position: relative;
+  grid-column: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-right: 1px solid #dfe5f0;
+  background: #f8faff;
+}
+
+.layout-sidebar[hidden] {
+  display: none;
+}
+
+.layout-sidebar-toggle {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  z-index: 2;
+  width: 30px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #6177ad;
+  background: transparent;
+  font: inherit;
+  font-size: 25px;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.layout-sidebar-toggle:hover {
+  border-color: #d8e0ef;
+  background: #eef3fb;
+}
+
+.layout-sidebar-panel {
+  width: 286px;
+  height: 100%;
+  padding: 24px 48px 24px 22px;
+  overflow: auto;
+}
+
+.layout-sidebar.is-collapsed .layout-sidebar-panel {
+  visibility: hidden;
+}
+
+.layout-sidebar-panel h2 {
+  margin: 0 0 22px;
+  font-size: 16px;
+}
+.layout-sidebar-panel > label {
+  display: block;
+  margin-bottom: 7px;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+.layout-sidebar-panel input {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid #d8e0ef;
+  border-radius: 6px;
+  color: #26334b;
+  background: #fff;
+  font: inherit;
+}
+.layout-sidebar-panel > input {
+  width: 100%;
+  margin-bottom: 15px;
 }
 
 .old-preview[hidden] {
@@ -413,105 +492,18 @@ body {
   right: 22px;
   bottom: 44px;
   z-index: 4;
-  padding: 9px 14px;
-  border: 1px solid #cbd5e8;
-  border-radius: 9px;
-  color: #405171;
-  background: #fff;
-  box-shadow: 0 4px 14px #26334b24;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.layout-button {
-  position: fixed;
-  left: 22px;
-  bottom: 44px;
-  z-index: 4;
-  padding: 9px 14px;
-  border: 1px solid #cbd5e8;
-  border-radius: 9px;
-  color: #405171;
-  background: #fff;
-  box-shadow: 0 4px 14px #26334b24;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.layout-button:hover {
-  border-color: #8095ca;
-  color: #405b91;
-}
-
-.layout-button[hidden] {
-  display: none;
-}
-
-.layout-dialog {
-  position: fixed;
-  inset: auto auto 88px 22px;
-  width: min(360px, calc(100vw - 44px));
-  max-height: calc(100vh - 150px);
-  margin: 0;
-  padding: 18px;
-  overflow: auto;
-  border: 1px solid #d8e0ef;
-  border-radius: 10px;
-  color: #26334b;
-  background: #fff;
-  box-shadow: 0 12px 36px #26334b30;
-}
-
-.layout-dialog form {
   display: grid;
-  gap: 9px;
-}
-
-.layout-dialog-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-}
-
-.layout-dialog h2 {
-  margin: 0;
-  font-size: 16px;
-}
-
-.layout-dialog label {
-  color: #566681;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.layout-dialog input {
-  min-width: 0;
-  min-height: 34px;
-  padding: 6px 9px;
-  border: 1px solid #d8e0ef;
-  border-radius: 6px;
-  color: #26334b;
-  background: #fff;
-  font: inherit;
-}
-
-.layout-dialog-close {
-  width: 30px;
-  height: 30px;
+  place-items: center;
+  width: 46px;
+  height: 46px;
   padding: 0;
-  border: 0;
-  border-radius: 6px;
-  color: #71809b;
-  background: transparent;
-  font-size: 20px;
+  border: 1px solid #cbd5e8;
+  border-radius: 50%;
+  color: #405171;
+  background: #fff;
+  box-shadow: 0 4px 14px #26334b24;
+  font: inherit;
   cursor: pointer;
-}
-
-.layout-dialog-close:hover {
-  background: #eef3fb;
 }
 
 .layout-margin-fields {
@@ -529,6 +521,38 @@ body {
   gap: 7px;
   color: #8490a6;
   font-size: 12px;
+}
+
+.sample-layout-button {
+  width: 100%;
+  min-height: 36px;
+  margin-top: 22px;
+  border: 1px solid #cbd5e8;
+  border-radius: 7px;
+  color: #405171;
+  background: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sample-layout-button:hover {
+  border-color: #8095ca;
+  color: #405b91;
+}
+.sample-layout-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.proof-pdf-button svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .proof-pdf-button:hover {

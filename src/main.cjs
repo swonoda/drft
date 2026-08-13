@@ -338,17 +338,27 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 
-ipcMain.handle("file:analyzePdf", async () => {
-  const result = await dialog.showOpenDialog(win, {
+async function chooseAndAnalyzePdf(parentWindow) {
+  const result = await dialog.showOpenDialog(parentWindow, {
     title: "ゲラPDFを選択",
     properties: ["openFile"],
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
   if (result.canceled) return null;
+  const pdfPath = result.filePaths[0];
   return {
-    path: result.filePaths[0],
-    ...(await analyzePdfLayout(result.filePaths[0])),
+    path: pdfPath,
+    sourceName: path.basename(pdfPath),
+    ...(await analyzePdfLayout(pdfPath)),
   };
+}
+
+ipcMain.handle("file:analyzePdf", () => chooseAndAnalyzePdf(win));
+
+ipcMain.handle("diff:analyzePdfLayout", (event) => {
+  const diffWin = BrowserWindow.fromWebContents(event.sender);
+  if (!diffWin) throw new Error("比較ウィンドウを取得できません");
+  return chooseAndAnalyzePdf(diffWin);
 });
 
 ipcMain.handle("file:open", async () => {

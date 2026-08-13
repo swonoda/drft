@@ -9,8 +9,8 @@ const leftDocument = $("leftDocument");
 const rightDocument = $("rightDocument");
 const comparison = document.querySelector(".comparison");
 const oldPreview = $("oldPreview");
-const layoutButton = $("layoutButton");
-const layoutDialog = $("layoutDialog");
+const layoutSidebar = $("layoutSidebar");
+const layoutSidebarToggle = $("layoutSidebarToggle");
 const proofPdfButton = $("proofPdfButton");
 const proofPdfDialog = $("proofPdfDialog");
 let viewMode = "diff";
@@ -278,20 +278,30 @@ function setViewMode(mode) {
   $("oldPreviewButton").classList.toggle("active", preview);
   $("diffViewButton").setAttribute("aria-pressed", String(!preview));
   $("oldPreviewButton").setAttribute("aria-pressed", String(preview));
-  layoutButton.hidden = !preview;
-  if (!preview && layoutDialog.open) layoutDialog.close();
+  layoutSidebar.hidden = !preview;
   if (preview) scheduleOldPreviewRender();
   updateProofPdfButton();
 }
 
-function openLayoutDialog() {
+function fillLayoutControls() {
   const settings = previewSettings();
   $("previewFont").value = settings.font;
   $("previewVerticalMargin").value = settings.verticalMarginMm;
   $("previewHorizontalMargin").value = settings.horizontalMarginMm;
   $("previewLinesPerPage").value = settings.linesPerPage;
   $("previewCharactersPerLine").value = settings.charactersPerLine;
-  if (!layoutDialog.open) layoutDialog.show();
+}
+
+function setLayoutSidebarOpen(open) {
+  layoutSidebar.classList.toggle("is-collapsed", !open);
+  layoutSidebarToggle.textContent = open ? "‹" : "›";
+  layoutSidebarToggle.setAttribute("aria-expanded", String(open));
+  layoutSidebarToggle.setAttribute(
+    "aria-label",
+    open ? "レイアウト調整を閉じる" : "レイアウト調整を開く",
+  );
+  localStorage.setItem("diffPreview.layoutPaneOpen", String(open));
+  scheduleOldPreviewRender();
 }
 
 function saveLayoutSettings() {
@@ -315,7 +325,12 @@ function saveLayoutSettings() {
   scheduleOldPreviewRender();
 }
 
-layoutButton.onclick = openLayoutDialog;
+fillLayoutControls();
+setLayoutSidebarOpen(
+  localStorage.getItem("diffPreview.layoutPaneOpen") === "true",
+);
+layoutSidebarToggle.onclick = () =>
+  setLayoutSidebarOpen(layoutSidebar.classList.contains("is-collapsed"));
 for (const control of [
   $("previewFont"),
   $("previewVerticalMargin"),
@@ -325,6 +340,37 @@ for (const control of [
 ]) {
   control.addEventListener("input", saveLayoutSettings);
 }
+
+$("sampleLayoutButton").onclick = async () => {
+  const button = $("sampleLayoutButton");
+  button.disabled = true;
+  $("status").textContent = "サンプルPDFの組版を調べています…";
+  try {
+    const result = await window.diffApi.analyzePdfLayout();
+    if (!result) {
+      $("status").textContent = "サンプルPDFの選択をキャンセルしました";
+      return;
+    }
+    const message =
+      `${result.charactersPerLine}字 × ${result.linesPerPage}行、` +
+      `上下${result.verticalMarginMm}mm、左右${result.horizontalMarginMm}mm\n\n` +
+      "この設定を縦書きプレビューへ反映しますか？";
+    if (!window.confirm(message)) {
+      $("status").textContent = `解析済み — ${result.sourceName}`;
+      return;
+    }
+    $("previewVerticalMargin").value = result.verticalMarginMm;
+    $("previewHorizontalMargin").value = result.horizontalMarginMm;
+    $("previewLinesPerPage").value = result.linesPerPage;
+    $("previewCharactersPerLine").value = result.charactersPerLine;
+    saveLayoutSettings();
+    $("status").textContent = `組版設定を反映 — ${result.sourceName}`;
+  } catch (error) {
+    $("status").textContent = `PDFを解析できません: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+};
 
 function stylesheetText() {
   return Array.from(document.styleSheets)

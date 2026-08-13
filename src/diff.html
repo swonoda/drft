@@ -31,6 +31,75 @@
     <main class="comparison">
       <pre class="document" id="leftDocument" tabindex="0"></pre>
       <pre class="document" id="rightDocument" tabindex="0"></pre>
+      <aside class="layout-sidebar is-collapsed" id="layoutSidebar" hidden>
+        <button
+          class="layout-sidebar-toggle"
+          id="layoutSidebarToggle"
+          type="button"
+          aria-label="レイアウト調整を開く"
+          aria-expanded="false"
+        >
+          ›
+        </button>
+        <div class="layout-sidebar-panel">
+          <h2>レイアウト調整</h2>
+          <label for="previewFont">フォント</label>
+          <input id="previewFont" type="text" spellcheck="false" />
+          <div class="layout-margin-fields">
+            <label for="previewVerticalMargin">上下余白</label>
+            <div>
+              <input
+                id="previewVerticalMargin"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+              />
+              <span>mm</span>
+            </div>
+            <label for="previewHorizontalMargin">左右余白</label>
+            <div>
+              <input
+                id="previewHorizontalMargin"
+                type="number"
+                min="0"
+                max="70"
+                step="0.5"
+              />
+              <span>mm</span>
+            </div>
+            <label for="previewLinesPerPage">1ページの行数</label>
+            <div>
+              <input
+                id="previewLinesPerPage"
+                type="number"
+                min="1"
+                max="60"
+                step="1"
+              />
+              <span>行</span>
+            </div>
+            <label for="previewCharactersPerLine">1行の文字数</label>
+            <div>
+              <input
+                id="previewCharactersPerLine"
+                type="number"
+                min="1"
+                max="100"
+                step="1"
+              />
+              <span>字</span>
+            </div>
+          </div>
+          <button
+            class="sample-layout-button"
+            id="sampleLayoutButton"
+            type="button"
+          >
+            サンプルPDFから設定…
+          </button>
+        </div>
+      </aside>
       <section
         class="old-preview"
         id="oldPreview"
@@ -38,69 +107,17 @@
         aria-label="古いファイルの縦書きプレビュー"
       ></section>
     </main>
-    <button class="layout-button" id="layoutButton" type="button" hidden>
-      レイアウト調整
-    </button>
-    <dialog class="layout-dialog" id="layoutDialog">
-      <form method="dialog">
-        <div class="layout-dialog-head">
-          <h2>レイアウト調整</h2>
-          <button class="layout-dialog-close" type="submit" aria-label="閉じる">
-            ×
-          </button>
-        </div>
-        <label for="previewFont">フォント</label>
-        <input id="previewFont" type="text" spellcheck="false" />
-        <div class="layout-margin-fields">
-          <label for="previewVerticalMargin">上下余白</label>
-          <div>
-            <input
-              id="previewVerticalMargin"
-              type="number"
-              min="0"
-              max="100"
-              step="0.5"
-            />
-            <span>mm</span>
-          </div>
-          <label for="previewHorizontalMargin">左右余白</label>
-          <div>
-            <input
-              id="previewHorizontalMargin"
-              type="number"
-              min="0"
-              max="70"
-              step="0.5"
-            />
-            <span>mm</span>
-          </div>
-          <label for="previewLinesPerPage">1ページの行数</label>
-          <div>
-            <input
-              id="previewLinesPerPage"
-              type="number"
-              min="1"
-              max="60"
-              step="1"
-            />
-            <span>行</span>
-          </div>
-          <label for="previewCharactersPerLine">1行の文字数</label>
-          <div>
-            <input
-              id="previewCharactersPerLine"
-              type="number"
-              min="1"
-              max="100"
-              step="1"
-            />
-            <span>字</span>
-          </div>
-        </div>
-      </form>
-    </dialog>
-    <button class="proof-pdf-button" id="proofPdfButton" type="button" hidden>
-      朱入り原稿PDF
+    <button
+      class="proof-pdf-button"
+      id="proofPdfButton"
+      type="button"
+      aria-label="朱入り原稿PDF"
+      title="朱入り原稿PDF"
+      hidden
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3" />
+      </svg>
     </button>
     <dialog class="proof-pdf-dialog" id="proofPdfDialog">
       <form id="proofPdfForm">

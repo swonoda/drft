@@ -3,6 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
+const { PDFDocument } = require("pdf-lib");
 
 const execFileAsync = promisify(execFile);
 
@@ -86,6 +87,32 @@ async function renderPage(pdfPath) {
   }
 }
 
+async function firstPageBoxes(pdfPath) {
+  const pdf = await PDFDocument.load(await fs.readFile(pdfPath));
+  const page = pdf.getPage(0);
+  return { media: page.getMediaBox(), trim: page.getTrimBox() };
+}
+
+function boxToImageBounds(box, media, image) {
+  const scaleX = image.width / media.width;
+  const scaleY = image.height / media.height;
+  return {
+    left: Math.max(0, Math.round((box.x - media.x) * scaleX)),
+    right: Math.min(
+      image.width,
+      Math.round((box.x + box.width - media.x) * scaleX),
+    ),
+    top: Math.max(
+      0,
+      Math.round(image.height - (box.y + box.height - media.y) * scaleY),
+    ),
+    bottom: Math.min(
+      image.height,
+      Math.round(image.height - (box.y - media.y) * scaleY),
+    ),
+  };
+}
+
 function parsePbm(buffer) {
   let offset = 0;
   const nextToken = () => {
@@ -122,16 +149,18 @@ function isInk(image, x, y) {
   return (image.data[y * image.rowBytes + (x >> 3)] & (0x80 >> (x & 7))) !== 0;
 }
 
-function projection(image, axis, start, end) {
+function projection(image, axis, start, end, bounds = {}) {
+  const left = bounds.left ?? 0;
+  const right = bounds.right ?? image.width;
+  const top = bounds.top ?? 0;
+  const bottom = bounds.bottom ?? image.height;
   const values = [];
   for (let i = start; i < end; i += 1) {
     let count = 0;
     if (axis === "x")
-      for (let y = 0; y < image.height; y += 1)
-        count += isInk(image, i, y) ? 1 : 0;
+      for (let y = top; y < bottom; y += 1) count += isInk(image, i, y) ? 1 : 0;
     else
-      for (let x = 0; x < image.width; x += 1)
-        count += isInk(image, x, i) ? 1 : 0;
+      for (let x = left; x < right; x += 1) count += isInk(image, x, i) ? 1 : 0;
     values.push(count);
   }
   return values;
@@ -215,31 +244,33 @@ function segments(values, threshold) {
   return result;
 }
 
-function estimateHalf(image, left, right) {
-  const xValues = projection(image, "x", left, right);
-  const yValues = projection(image, "y", 0, image.height);
+function estimateHalf(image, left, right, top = 0, bottom = image.height) {
+  const pageWidth = right - left;
+  const pageHeight = bottom - top;
+  const xValues = projection(image, "x", left, right, { top, bottom });
+  const yValues = projection(image, "y", top, bottom, { left, right });
   const xSpan = clusteredSpan(
     xValues,
-    Math.max(3, Math.round(image.height * 0.015)),
-    Math.round((right - left) * 0.06),
+    Math.max(3, Math.round(pageHeight * 0.015)),
+    Math.round(pageWidth * 0.06),
   );
 
   const ySpan = clusteredSpan(
     yValues,
-    Math.max(3, Math.round((right - left) * 0.01)),
-    Math.round(image.height * 0.015),
+    Math.max(3, Math.round(pageWidth * 0.01)),
+    Math.round(pageHeight * 0.015),
   );
   const bodyLeft = left + xSpan.start;
   const bodyRight = left + xSpan.end;
-  const bodyTop = ySpan.start;
-  const bodyBottom = ySpan.end;
+  const bodyTop = top + ySpan.start;
+  const bodyBottom = top + ySpan.end;
   const bodyWidth = bodyRight - bodyLeft;
   const bodyHeight = bodyBottom - bodyTop;
   if (bodyWidth < 30 || bodyHeight < 30) throw new Error(PDF_LAYOUT_ERROR);
 
   const lineSegments = segments(
     xValues.slice(xSpan.start, xSpan.end),
-    Math.max(2, Math.round(image.height * 0.01)),
+    Math.max(2, Math.round(pageHeight * 0.01)),
   );
   const rowSegments = segments(
     yValues.slice(ySpan.start, ySpan.end),
@@ -255,7 +286,14 @@ function estimateHalf(image, left, right) {
   );
   const linesPerPage = clamp(bodyWidth / linePitch, 8, 40);
   const charactersPerLine = clamp(bodyHeight / charPitch, 10, 80);
-  return { linesPerPage, charactersPerLine };
+  return {
+    linesPerPage,
+    charactersPerLine,
+    horizontalMarginRatio:
+      (bodyLeft - left + (right - bodyRight)) / 2 / pageWidth,
+    verticalMarginRatio:
+      (bodyTop - top + (bottom - bodyBottom)) / 2 / pageHeight,
+  };
 }
 
 function medianAdvance(spans, fallback) {
@@ -272,24 +310,44 @@ function clamp(value, min, max) {
 }
 
 async function analyzePdfLayout(pdfPath) {
-  const image = await renderPage(pdfPath);
-  const spread = image.width / image.height > 1.25;
+  const [image, boxes] = await Promise.all([
+    renderPage(pdfPath),
+    firstPageBoxes(pdfPath),
+  ]);
+  const trim = boxToImageBounds(boxes.trim, boxes.media, image);
+  const trimWidth = trim.right - trim.left;
+  const trimHeight = trim.bottom - trim.top;
+  const spread = trimWidth / trimHeight > 1.25;
   const halves = spread
     ? [
-        [0, Math.floor(image.width / 2)],
-        [Math.floor(image.width / 2), image.width],
+        [trim.left, Math.floor((trim.left + trim.right) / 2)],
+        [Math.floor((trim.left + trim.right) / 2), trim.right],
       ]
-    : [[0, image.width]];
+    : [[trim.left, trim.right]];
   const estimates = halves.map(([left, right]) =>
-    estimateHalf(image, left, right),
+    estimateHalf(image, left, right, trim.top, trim.bottom),
   );
   return {
     pagesAnalyzed: 1,
     charactersPerLine: mode(estimates.map((item) => item.charactersPerLine)),
     linesPerPage: mode(estimates.map((item) => item.linesPerPage)),
+    verticalMarginMm: roundHalf(
+      mean(estimates.map((item) => item.verticalMarginRatio)) * 210,
+    ),
+    horizontalMarginMm: roundHalf(
+      mean(estimates.map((item) => item.horizontalMarginRatio)) * 148.5,
+    ),
     spread,
     confidence: "low",
   };
+}
+
+function mean(values) {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function roundHalf(value) {
+  return Math.round(value * 2) / 2;
 }
 
 function mode(values) {
@@ -298,4 +356,9 @@ function mode(values) {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
 }
 
-module.exports = { analyzePdfLayout, estimateHalf, parsePbm };
+module.exports = {
+  analyzePdfLayout,
+  boxToImageBounds,
+  estimateHalf,
+  parsePbm,
+};
