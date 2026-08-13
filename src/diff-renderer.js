@@ -1,4 +1,4 @@
-import { renderPreviewDocument } from "./parser.js";
+import { manuscriptText, renderPreviewDocument } from "./parser.js";
 import {
   fixedSpreadPreviewLayout,
   previewPageCount,
@@ -92,6 +92,91 @@ function afterPreviewLayout(callback) {
   });
 }
 
+function visibleProofreadChanges(text, changes) {
+  const normalized = text.replaceAll("\r\n", "\n");
+  return changes
+    .map((change) => ({
+      ...change,
+      start: manuscriptText(normalized.slice(0, change.start)).length,
+      end: manuscriptText(normalized.slice(0, change.end)).length,
+      note:
+        change.type === "replace"
+          ? manuscriptText(change.replacement || "")
+          : "トル",
+    }))
+    .filter((change) => change.end > change.start && change.note);
+}
+
+function applyProofreadChanges(container, text, changes) {
+  const visibleChanges = visibleProofreadChanges(text, changes);
+  container.dataset.proofreadChanges = JSON.stringify(visibleChanges);
+}
+
+function positionProofreadNotes(page) {
+  page.querySelector(".proofread-note-layer")?.remove();
+  const layer = document.createElement("div");
+  layer.className = "proofread-note-layer";
+  const content = page.querySelector(".preview-page-content");
+  const changes = JSON.parse(content.dataset.proofreadChanges || "[]");
+  if (!changes.length) return;
+  const pageRect = page.getBoundingClientRect();
+  const bodyRect = page
+    .querySelector(".preview-page-body")
+    .getBoundingClientRect();
+  const scaleX = pageRect.width / page.offsetWidth;
+  const scaleY = pageRect.height / page.offsetHeight;
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  let offset = 0;
+  let node;
+  while ((node = walker.nextNode())) {
+    if (node.parentElement?.closest("rt")) continue;
+    nodes.push({ node, start: offset, end: offset + node.data.length });
+    offset += node.data.length;
+  }
+  const visible = (rect) =>
+    rect.right > bodyRect.left &&
+    rect.left < bodyRect.right &&
+    rect.bottom > bodyRect.top &&
+    rect.top < bodyRect.bottom;
+  for (const change of changes) {
+    const first = nodes.find((item) => change.start < item.end);
+    const last = [...nodes].reverse().find((item) => change.end > item.start);
+    if (!first || !last) continue;
+    const range = document.createRange();
+    range.setStart(first.node, Math.max(0, change.start - first.start));
+    range.setEnd(
+      last.node,
+      Math.min(last.node.data.length, change.end - last.start),
+    );
+    const rects = [...range.getClientRects()];
+    for (const rect of rects.filter(visible)) {
+      const strike = document.createElement("span");
+      strike.className = "proofread-strike";
+      strike.style.top = `${(rect.top - pageRect.top) / scaleY}px`;
+      strike.style.left = `${(rect.left + rect.width / 2 - pageRect.left) / scaleX}px`;
+      strike.style.height = `${rect.height / scaleY}px`;
+      layer.append(strike);
+    }
+    const anchorRect = rects[0];
+    if (!anchorRect || !visible(anchorRect)) continue;
+    const note = document.createElement("span");
+    note.className = "proofread-note";
+    note.textContent = change.note;
+    note.style.fontSize = `${parseFloat(getComputedStyle(first.node.parentElement).fontSize) * 0.5}px`;
+    note.style.top = `${(anchorRect.top - pageRect.top) / scaleY}px`;
+    note.style.left = `${(anchorRect.right - pageRect.left) / scaleX + 2}px`;
+    layer.append(note);
+  }
+  page.append(layer);
+}
+
+function scheduleProofreadNotes(pages) {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => pages.forEach(positionProofreadNotes)),
+  );
+}
+
 function updatePreviewSpread() {
   if (!previewPagination) return;
   const {
@@ -101,6 +186,7 @@ function updatePreviewSpread() {
     nextButton,
     backButton,
     pageState,
+    pages,
   } = previewPagination;
   const maximumSpread = Math.max(0, Math.ceil(pageCount / 2) - 1);
   currentPreviewSpread = Math.max(
@@ -122,6 +208,7 @@ function updatePreviewSpread() {
     rightPage + 1 === lastVisiblePage
       ? `${rightPage + 1} / ${pageCount}`
       : `${rightPage + 1}–${lastVisiblePage} / ${pageCount}`;
+  scheduleProofreadNotes(pages);
 }
 
 function renderOldPreview(text) {
@@ -176,6 +263,7 @@ function renderOldPreview(text) {
 
   const html = renderPreviewDocument(text);
   const pageContents = [];
+  const pages = [];
   const reader = document.createElement("div");
   reader.className = "preview-reader";
   const nextButton = document.createElement("button");
@@ -210,10 +298,12 @@ function renderOldPreview(text) {
     const content = document.createElement("div");
     content.className = "preview-page-content";
     content.innerHTML = html;
+    applyProofreadChanges(content, text, currentState?.proofreadChanges || []);
     pageBody.append(content);
     page.append(pageBody);
     spread.append(page);
     pageContents[pageIndex] = content;
+    pages[pageIndex] = page;
   }
   spreadFrame.append(spread);
   reader.append(nextButton, spreadFrame, backButton, pageState);
@@ -241,6 +331,7 @@ function renderOldPreview(text) {
       nextButton,
       backButton,
       pageState,
+      pages,
     };
     updatePreviewSpread();
     proofPdfPreview = {
@@ -414,6 +505,7 @@ function buildProofPdfHtml() {
   const page = displayedPage.cloneNode(true);
   page.classList.add("proof-page");
   page.style.visibility = "visible";
+  page.querySelector(".proofread-note-layer")?.remove();
   page.querySelector(".preview-page-content").style.transform =
     "translateX(var(--proof-content-offset))";
   const frame = document.createElement("div");
@@ -455,7 +547,7 @@ function buildProofPdfHtml() {
     .proof-page::after { border: 0; }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}</body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     pageCount,
     bodyWidth,
   };

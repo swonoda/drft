@@ -1,6 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildDiffParts } = require("../src/diff-engine.cjs");
+const {
+  buildDiffParts,
+  buildProofreadChanges,
+} = require("../src/diff-engine.cjs");
 
 test("変更部分を単語単位で識別する", () => {
   const parts = buildDiffParts("白熊が歩く。", "白熊がゆっくり歩く。");
@@ -36,4 +39,37 @@ test("改行コードを揃えて比較する", () => {
     parts.some((part) => part.changeId !== null),
     false,
   );
+});
+
+test("削除をトル指定用の範囲へ変換する", () => {
+  const parts = buildDiffParts("白熊が歩く。", "白熊が。");
+  assert.deepEqual(buildProofreadChanges(parts), [
+    {
+      id: 1,
+      start: 3,
+      end: 5,
+      removed: "歩く",
+      replacement: null,
+      type: "delete",
+    },
+  ]);
+});
+
+test("隣接する削除と追加を置き換え指定へ変換する", () => {
+  const parts = buildDiffParts("氷が光る。", "雪が光る。");
+  assert.deepEqual(buildProofreadChanges(parts), [
+    {
+      id: 1,
+      start: 0,
+      end: 1,
+      removed: "氷",
+      replacement: "雪",
+      type: "replace",
+    },
+  ]);
+});
+
+test("追加だけの変更は削除・置き換え指定に含めない", () => {
+  const parts = buildDiffParts("白熊。", "大きな白熊。");
+  assert.deepEqual(buildProofreadChanges(parts), []);
 });

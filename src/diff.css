@@ -487,6 +487,33 @@ body {
   text-emphasis-position: over right;
 }
 
+.proofread-note-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.proofread-strike {
+  position: absolute;
+  width: 1.5px;
+  border-radius: 1px;
+  background: #d34f5b;
+}
+
+.proofread-note {
+  position: absolute;
+  color: #d34f5b;
+  font-family: var(--diff-preview-font);
+  font-size: calc(var(--diff-preview-size) * 0.5);
+  font-weight: 600;
+  line-height: 1;
+  text-orientation: upright;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
 .proof-pdf-button {
   position: fixed;
   right: 22px;

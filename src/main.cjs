@@ -7,7 +7,7 @@ const {
 } = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
-const { buildDiffParts } = require("./diff-engine.cjs");
+const { buildDiffParts, buildProofreadChanges } = require("./diff-engine.cjs");
 const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
 const { proofPdfDefaultPath, ensurePdfExtension } = require("./proof-pdf.cjs");
@@ -502,7 +502,10 @@ async function renderProofSpreadPdf(html, pageCount, bodyWidth) {
           "--proof-content-offset",
           ${JSON.stringify(offset)}
         );
-        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+          window.positionProofreadNotes?.(document.querySelector(".proof-page"));
+          requestAnimationFrame(resolve);
+        })));
       `);
       singlePages.push(
         await pdfWin.webContents.printToPDF({
@@ -558,13 +561,15 @@ function diffWindowState(diffWin) {
           current: Boolean(document.current),
         }
       : null;
+  const parts =
+    documents.left && documents.right
+      ? buildDiffParts(documents.left.text, documents.right.text)
+      : null;
   return {
     left: fileInfo(documents.left),
     right: fileInfo(documents.right),
-    parts:
-      documents.left && documents.right
-        ? buildDiffParts(documents.left.text, documents.right.text)
-        : null,
+    parts,
+    proofreadChanges: parts ? buildProofreadChanges(parts) : [],
   };
 }
 
