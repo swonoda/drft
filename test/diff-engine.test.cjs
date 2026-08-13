@@ -119,7 +119,7 @@ test("改行をまたぐ置き換えを行ごとの校正指示へ分ける", ()
   const oldText =
     "あいうえお\n\nあいうえお\nかきくけこ\nさしすせそ\nたちつてと";
   const newText =
-    "あいうえお\n\nあお\nかき\nさし\nみはあさがいちばん\nでも食べるなら夜かな。";
+    "あいうえお\n\nあお\nかき\nさしみはあさがいちばん\nでも食べるなら夜かな。";
   assert.deepEqual(buildProofreadChanges(oldText, newText), [
     {
       id: 1,
@@ -178,7 +178,7 @@ test("後続段落に変更があっても前段落の置換判定を変えな�
   const oldSample =
     "あいうえお\n\nあいうえお\nかきくけこ\nさしすせそ\nたちつてと";
   const newSample =
-    "あいうえお\n\nあお\nかき\nさし\nみはあさがいちばん\nでも食べるなら夜かな。";
+    "あいうえお\n\nあお\nかき\nさしみはあさがいちばん\nでも食べるなら夜かな。";
   const oldText = `${oldSample}\n\n良平りょうへいは歩く。トロッコは走る。`;
   const newText = `${newSample}\n\n良平は歩く。トロッコは山を下るので走る。`;
   const changes = buildProofreadChanges(oldText, newText);
@@ -201,6 +201,24 @@ test("後続段落に変更があっても前段落の置換判定を変えな�
         replacement: "でも食べるなら夜かな。",
         type: "replace",
       },
+    ],
+  );
+});
+
+test("句点のない詩や箇条書きも改行ごとに別の文として扱う", () => {
+  const changes = buildProofreadChanges(
+    "朝の光\n氷の海\n白い岸",
+    "朝の光\n青い海\n白い岸に立つ",
+  );
+  assert.deepEqual(
+    changes.map(({ removed, replacement, type }) => ({
+      removed,
+      replacement,
+      type,
+    })),
+    [
+      { removed: "氷の", replacement: "青い", type: "replace" },
+      { removed: "", replacement: "に立つ", type: "add" },
     ],
   );
 });
