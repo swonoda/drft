@@ -20,14 +20,14 @@ export function findProofreadNotePosition({
   const candidates = [];
   for (let y = gap; y <= pageHeight - height - gap; y += step) {
     for (let x = gap; x <= pageWidth - width - gap; x += step) {
-      const centerX = x + width / 2;
-      const centerY = y + height / 2;
+      const distanceX = Math.max(x - anchor.x, anchor.x - (x + width), 0);
+      const distanceY = Math.max(y - anchor.y, anchor.y - (y + height), 0);
       candidates.push({
         x,
         y,
         width,
         height,
-        distance: Math.abs(centerX - anchor.x) + Math.abs(centerY - anchor.y),
+        distance: distanceX + distanceY,
       });
     }
   }

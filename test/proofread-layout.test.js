@@ -34,3 +34,22 @@ test("空白候補は既存の校正文字とも重ならない", () => {
   });
   assert.notDeepEqual({ x: position.x, y: position.y }, { x: 38, y: 68 });
 });
+
+test("長い校正文字でも中心ではなく最も近い辺までの距離で選ぶ", () => {
+  const position = findProofreadNotePosition({
+    pageWidth: 120,
+    pageHeight: 240,
+    noteWidth: 12,
+    noteHeight: 100,
+    anchor: { x: 70, y: 80 },
+    occupied: [
+      { x: 50, y: 20, width: 40, height: 60 },
+      { x: 20, y: 0, width: 30, height: 200 },
+      { x: 90, y: 0, width: 30, height: 200 },
+    ],
+    gap: 2,
+    step: 2,
+  });
+  assert.ok(position.y >= 82);
+  assert.ok(position.x >= 50 && position.x <= 78);
+});
