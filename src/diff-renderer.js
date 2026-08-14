@@ -172,20 +172,28 @@ function positionProofreadNotes(page) {
   );
   layer.append(leaderSvg);
   let leaderIndex = 0;
-  const appendLeader = (anchor, position) => {
+  const leaderMetrics = () => {
+    const fontSize = parseFloat(getComputedStyle(content).fontSize) || 16;
+    return {
+      armLength: Math.max(7, fontSize * 0.45),
+      laneOffset: (leaderIndex % 4) * 3,
+    };
+  };
+  const appendLeader = (anchor, position, options = {}) => {
     const leader = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "polyline",
     );
-    const laneOffset = (leaderIndex % 4) * 3;
+    const { armLength, laneOffset } = options.metrics || leaderMetrics();
     leaderIndex++;
-    const fontSize = parseFloat(getComputedStyle(content).fontSize) || 16;
     const points = proofreadLeaderPoints({
       anchor,
       position,
       pageHeight: page.offsetHeight,
-      armLength: Math.max(7, fontSize * 0.45),
+      armLength,
       laneOffset,
+      gutterOnly: options.gutterOnly,
+      armDirection: options.armDirection,
     });
     leader.setAttribute(
       "points",
@@ -328,14 +336,16 @@ function positionProofreadNotes(page) {
     note.style.fontSize = `${fontSize}px`;
     const anchor = {
       x: anchorPageRect.x + anchorPageRect.width / 2,
-      y: anchorPageRect.y,
+      y: anchorPageRect.y + fontSize * 0.5,
     };
+    const metrics = leaderMetrics();
+    const gutterX = anchor.x + metrics.armLength + metrics.laneOffset;
     const position = findProofreadNotePosition({
       pageWidth: page.offsetWidth,
       pageHeight: page.offsetHeight,
       noteWidth: fontSize * 1.15,
       noteHeight: Math.max(fontSize, [...change.note].length * fontSize),
-      anchor,
+      anchor: { x: gutterX, y: anchor.y },
       occupied,
       gap: Math.max(3, fontSize * 0.2),
       step: Math.max(4, fontSize * 0.35),
@@ -344,7 +354,11 @@ function positionProofreadNotes(page) {
     note.style.left = `${position.x}px`;
     layer.append(note);
     occupied.push(position);
-    appendLeader(anchor, position);
+    appendLeader(anchor, position, {
+      metrics,
+      gutterOnly: true,
+      armDirection: 1,
+    });
   }
   page.append(layer);
 }

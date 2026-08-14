@@ -98,6 +98,8 @@ export function proofreadLeaderPoints({
   pageHeight,
   armLength = 8,
   laneOffset = 0,
+  gutterOnly = false,
+  armDirection,
 }) {
   const destination = {
     x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
@@ -105,9 +107,17 @@ export function proofreadLeaderPoints({
   };
   const deltaX = destination.x - anchor.x;
   const deltaY = destination.y - anchor.y;
-  const horizontalDirection = deltaX < 0 ? -1 : 1;
+  const horizontalDirection = armDirection ?? (deltaX < 0 ? -1 : 1);
   const armX =
     anchor.x + horizontalDirection * (armLength + Math.max(0, laneOffset));
+
+  if (gutterOnly) {
+    return [
+      anchor,
+      { x: armX, y: anchor.y },
+      { x: armX, y: destination.y },
+    ];
+  }
 
   if (Math.abs(deltaY) >= Math.abs(deltaX)) {
     return [

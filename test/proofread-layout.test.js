@@ -143,3 +143,21 @@ test("左右余白への引出線も始点側に折れを作る", () => {
     ],
   );
 });
+
+test("置換の引出線は右の行間へ出たあと注記側へ戻らない", () => {
+  assert.deepEqual(
+    proofreadLeaderPoints({
+      anchor: { x: 50, y: 48 },
+      position: { x: 45, y: 75, width: 10, height: 20 },
+      pageHeight: 100,
+      armLength: 8,
+      gutterOnly: true,
+      armDirection: 1,
+    }),
+    [
+      { x: 50, y: 48 },
+      { x: 58, y: 48 },
+      { x: 58, y: 75 },
+    ],
+  );
+});
