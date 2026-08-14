@@ -91,3 +91,42 @@ export function findInlineProofreadPosition({
     ? candidate
     : null;
 }
+
+export function proofreadLeaderPoints({
+  anchor,
+  position,
+  pageHeight,
+  armLength = 8,
+  laneOffset = 0,
+}) {
+  const destination = {
+    x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
+    y: Math.max(position.y, Math.min(position.y + position.height, anchor.y)),
+  };
+  const deltaX = destination.x - anchor.x;
+  const deltaY = destination.y - anchor.y;
+  const horizontalDirection = deltaX < 0 ? -1 : 1;
+  const armX =
+    anchor.x + horizontalDirection * (armLength + Math.max(0, laneOffset));
+
+  if (Math.abs(deltaY) >= Math.abs(deltaX)) {
+    return [
+      anchor,
+      { x: armX, y: anchor.y },
+      { x: armX, y: destination.y },
+      destination,
+    ];
+  }
+
+  const verticalDirection =
+    deltaY === 0 ? (anchor.y <= pageHeight / 2 ? -1 : 1) : Math.sign(deltaY);
+  const elbowY =
+    anchor.y + verticalDirection * (armLength + Math.max(0, laneOffset));
+  return [
+    anchor,
+    { x: armX, y: anchor.y },
+    { x: armX, y: elbowY },
+    { x: destination.x, y: elbowY },
+    destination,
+  ];
+}
