@@ -2,6 +2,7 @@ import { manuscriptText, renderPreviewDocument } from "./parser.js";
 import {
   findInlineProofreadPosition,
   findProofreadNotePosition,
+  proofreadLeaderPoints,
 } from "./proofread-layout.js";
 import {
   fixedSpreadPreviewLayout,
@@ -171,40 +172,29 @@ function positionProofreadNotes(page) {
   );
   layer.append(leaderSvg);
   let leaderIndex = 0;
-  const appendLeader = (anchor, position) => {
-    const destination = {
-      x: Math.max(position.x, Math.min(position.x + position.width, anchor.x)),
-      y: Math.max(position.y, Math.min(position.y + position.height, anchor.y)),
+  const leaderMetrics = () => {
+    const fontSize = parseFloat(getComputedStyle(content).fontSize) || 16;
+    return {
+      armLength: Math.max(7, fontSize * 0.45),
+      laneOffset: (leaderIndex % 4) * 3,
     };
+  };
+  const appendLeader = (anchor, position, options = {}) => {
     const leader = document.createElementNS(
       "http://www.w3.org/2000/svg",
       "polyline",
     );
-    const laneNumber = Math.ceil(leaderIndex / 2);
-    const laneOffset = laneNumber * 5 * (leaderIndex % 2 ? -1 : 1);
+    const { armLength, laneOffset } = options.metrics || leaderMetrics();
     leaderIndex++;
-    const deltaX = Math.abs(destination.x - anchor.x);
-    const deltaY = Math.abs(destination.y - anchor.y);
-    const points =
-      deltaX >= deltaY
-        ? [
-            anchor,
-            { x: (anchor.x + destination.x) / 2 + laneOffset, y: anchor.y },
-            {
-              x: (anchor.x + destination.x) / 2 + laneOffset,
-              y: destination.y,
-            },
-            destination,
-          ]
-        : [
-            anchor,
-            { x: anchor.x, y: (anchor.y + destination.y) / 2 + laneOffset },
-            {
-              x: destination.x,
-              y: (anchor.y + destination.y) / 2 + laneOffset,
-            },
-            destination,
-          ];
+    const points = proofreadLeaderPoints({
+      anchor,
+      position,
+      pageHeight: page.offsetHeight,
+      armLength,
+      laneOffset,
+      gutterOnly: options.gutterOnly,
+      armDirection: options.armDirection,
+    });
     leader.setAttribute(
       "points",
       points.map((point) => `${point.x},${point.y}`).join(" "),
@@ -346,14 +336,16 @@ function positionProofreadNotes(page) {
     note.style.fontSize = `${fontSize}px`;
     const anchor = {
       x: anchorPageRect.x + anchorPageRect.width / 2,
-      y: anchorPageRect.y,
+      y: anchorPageRect.y + fontSize * 0.5,
     };
+    const metrics = leaderMetrics();
+    const gutterX = anchor.x + metrics.armLength + metrics.laneOffset;
     const position = findProofreadNotePosition({
       pageWidth: page.offsetWidth,
       pageHeight: page.offsetHeight,
       noteWidth: fontSize * 1.15,
       noteHeight: Math.max(fontSize, [...change.note].length * fontSize),
-      anchor,
+      anchor: { x: gutterX, y: anchor.y },
       occupied,
       gap: Math.max(3, fontSize * 0.2),
       step: Math.max(4, fontSize * 0.35),
@@ -362,7 +354,11 @@ function positionProofreadNotes(page) {
     note.style.left = `${position.x}px`;
     layer.append(note);
     occupied.push(position);
-    appendLeader(anchor, position);
+    appendLeader(anchor, position, {
+      metrics,
+      gutterOnly: true,
+      armDirection: 1,
+    });
   }
   page.append(layer);
 }
@@ -743,7 +739,7 @@ function buildProofPdfHtml() {
     .proof-page::after { border: 0; }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     pageCount,
     bodyWidth,
   };

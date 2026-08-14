@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   findInlineProofreadPosition,
   findProofreadNotePosition,
+  proofreadLeaderPoints,
 } from "../src/proofread-layout.js";
 
 test("本文領域内を含む最寄りの空白へ校正文字を置く", () => {
@@ -88,5 +89,75 @@ test("行間やページ下端へ収まらない置換文字は欄外配置へ�
       ],
     }),
     null,
+  );
+});
+
+test("上余白への引出線は始点の横へ短く出してから上へ曲げる", () => {
+  assert.deepEqual(
+    proofreadLeaderPoints({
+      anchor: { x: 50, y: 60 },
+      position: { x: 45, y: 10, width: 10, height: 20 },
+      pageHeight: 100,
+      armLength: 8,
+    }),
+    [
+      { x: 50, y: 60 },
+      { x: 58, y: 60 },
+      { x: 58, y: 30 },
+      { x: 50, y: 30 },
+    ],
+  );
+});
+
+test("下余白への引出線は始点の横へ短く出してから下へ曲げる", () => {
+  assert.deepEqual(
+    proofreadLeaderPoints({
+      anchor: { x: 50, y: 40 },
+      position: { x: 45, y: 75, width: 10, height: 20 },
+      pageHeight: 100,
+      armLength: 8,
+    }),
+    [
+      { x: 50, y: 40 },
+      { x: 58, y: 40 },
+      { x: 58, y: 75 },
+      { x: 50, y: 75 },
+    ],
+  );
+});
+
+test("左右余白への引出線も始点側に折れを作る", () => {
+  assert.deepEqual(
+    proofreadLeaderPoints({
+      anchor: { x: 50, y: 60 },
+      position: { x: 80, y: 50, width: 10, height: 20 },
+      pageHeight: 100,
+      armLength: 8,
+    }),
+    [
+      { x: 50, y: 60 },
+      { x: 58, y: 60 },
+      { x: 58, y: 68 },
+      { x: 80, y: 68 },
+      { x: 80, y: 60 },
+    ],
+  );
+});
+
+test("置換の引出線は右の行間へ出たあと注記側へ戻らない", () => {
+  assert.deepEqual(
+    proofreadLeaderPoints({
+      anchor: { x: 50, y: 48 },
+      position: { x: 45, y: 75, width: 10, height: 20 },
+      pageHeight: 100,
+      armLength: 8,
+      gutterOnly: true,
+      armDirection: 1,
+    }),
+    [
+      { x: 50, y: 48 },
+      { x: 58, y: 48 },
+      { x: 58, y: 75 },
+    ],
   );
 });
