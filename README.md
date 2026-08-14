@@ -6,7 +6,7 @@ DRFTは、商業出版の原稿作成に必要な機能を搭載したWindows向
 
 手元では30万字の原稿まで入力遅延なく動作することを確認しています。
 
-![DRFTの編集画面](docs/screenshot.png)
+![DRFTの編集画面](docs/img/screenshot.png)
 
 ## インストールと起動
 
@@ -60,8 +60,9 @@ npm test
 - 差分ビューから校正原稿を自動作成・PDFへ出力
 - 縦書きPDF/EPUBの出力
 
-操作方法と記法の詳細は[ユーザーマニュアル](doc/manual.md)を参照してください。
+操作方法と記法の詳細は[ユーザーマニュアル](docs/manual.md)を参照してください。
 
 ## License
 
 DRFTは[MIT License](LICENSE)で公開されています。
+
