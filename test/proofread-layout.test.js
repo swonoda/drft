@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
   proofreadLeaderPoints,
@@ -60,19 +61,54 @@ test("長い校正文字でも中心ではなく最も近い辺までの距離�
 
 test("短い置換文字は取り消し線右側の行間へ置く", () => {
   const position = findInlineProofreadPosition({
-    pageWidth: 120,
+    pageWidth: 140,
     pageHeight: 200,
     noteLength: 3,
     baseFontSize: 16,
     anchorRect: { x: 50, y: 40, width: 12, height: 48 },
     occupied: [
       { x: 50, y: 20, width: 12, height: 100 },
-      { x: 80, y: 20, width: 12, height: 100 },
+      { x: 105, y: 20, width: 12, height: 100 },
     ],
   });
   assert.ok(position);
-  assert.ok(position.x > 62 && position.x < 80);
+  assert.ok(position.x > 72 && position.x < 105);
   assert.ok(position.fontSize < 16);
+  assert.ok(position.leaderLength >= 10);
+});
+
+test("引出線の長さを確保できない行間は欄外配置へ回す", () => {
+  assert.equal(
+    findInlineProofreadPosition({
+      pageWidth: 120,
+      pageHeight: 200,
+      noteLength: 1,
+      baseFontSize: 16,
+      anchorRect: { x: 50, y: 40, width: 12, height: 16 },
+      occupied: [
+        { x: 50, y: 20, width: 12, height: 100 },
+        { x: 80, y: 20, width: 12, height: 100 },
+      ],
+    }),
+    null,
+  );
+});
+
+test("長い追加文は空き領域へ収まる複数列のブロックにする", () => {
+  const position = findProofreadBlockPosition({
+    pageWidth: 140,
+    pageHeight: 200,
+    noteLines: [52],
+    baseFontSize: 10,
+    anchor: { x: 70, y: 80 },
+    occupied: [{ x: 0, y: 0, width: 140, height: 118 }],
+    gap: 2,
+    step: 2,
+  });
+  assert.ok(position);
+  assert.ok(position.y >= 120);
+  assert.ok(position.columns >= 7);
+  assert.ok(position.height <= 78);
 });
 
 test("行間やページ下端へ収まらない置換文字は欄外配置へ回す", () => {

@@ -1,5 +1,10 @@
-import { manuscriptText, renderPreviewDocument } from "./parser.js";
 import {
+  manuscriptText,
+  manuscriptTextWithLineBreaks,
+  renderPreviewDocument,
+} from "./parser.js";
+import {
+  findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
   proofreadLeaderPoints,
@@ -106,7 +111,7 @@ function visibleProofreadChanges(text, changes) {
       end: manuscriptText(normalized.slice(0, change.end)).length,
       note:
         change.type === "replace" || change.type === "add"
-          ? manuscriptText(change.replacement || "")
+          ? manuscriptTextWithLineBreaks(change.replacement || "")
           : "トル",
     }))
     .filter(
@@ -201,6 +206,15 @@ function positionProofreadNotes(page) {
     );
     leaderSvg.append(leader);
   };
+  const appendStraightLeader = (start, end) => {
+    const leader = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "polyline",
+    );
+    leaderIndex++;
+    leader.setAttribute("points", `${start.x},${start.y} ${end.x},${end.y}`);
+    leaderSvg.append(leader);
+  };
   const insertionPoint = (changeOffset) => {
     const item =
       nodes.find(
@@ -262,6 +276,32 @@ function positionProofreadNotes(page) {
       note.className = "proofread-note proofread-note-add";
       note.textContent = change.note;
       note.style.fontSize = `${fontSize}px`;
+      const noteLines = note.textContent
+        .split("\n")
+        .map((line) => [...line].length);
+      if (noteLines.length > 1 || noteLines[0] > 20) {
+        const blockPosition = findProofreadBlockPosition({
+          pageWidth: page.offsetWidth,
+          pageHeight: page.offsetHeight,
+          noteLines,
+          baseFontSize: fontSize,
+          anchor: insertion.anchor,
+          occupied,
+          gap: Math.max(3, fontSize * 0.2),
+          step: Math.max(4, fontSize * 0.35),
+        });
+        if (blockPosition) {
+          note.classList.add("proofread-note-block");
+          note.style.top = `${blockPosition.y}px`;
+          note.style.left = `${blockPosition.x}px`;
+          note.style.width = `${blockPosition.width}px`;
+          note.style.height = `${blockPosition.height}px`;
+          layer.append(note);
+          occupied.push(blockPosition);
+          appendLeader(insertion.anchor, blockPosition);
+          continue;
+        }
+      }
       const position = findProofreadNotePosition({
         pageWidth: page.offsetWidth,
         pageHeight: page.offsetHeight,
@@ -330,6 +370,15 @@ function positionProofreadNotes(page) {
       note.style.left = `${inlinePosition.x}px`;
       layer.append(note);
       occupied.push(inlinePosition);
+      const leaderY =
+        anchorPageRect.y + Math.min(anchorPageRect.height, fontSize) * 0.5;
+      appendStraightLeader(
+        {
+          x: anchorPageRect.x + anchorPageRect.width / 2,
+          y: leaderY,
+        },
+        { x: inlinePosition.x - 1, y: leaderY },
+      );
       continue;
     }
 
@@ -800,7 +849,7 @@ function buildProofPdfHtml(settings) {
     }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     bodyWidth,
     ...settings,
   };

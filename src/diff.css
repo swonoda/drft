@@ -529,6 +529,13 @@ body {
   writing-mode: vertical-rl;
 }
 
+.proofread-note-block {
+  display: block;
+  box-sizing: border-box;
+  line-height: 1.15;
+  white-space: pre-wrap;
+}
+
 .proofread-insert-caret {
   fill: none;
   stroke: #d34f5b;

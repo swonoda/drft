@@ -5,6 +5,7 @@ import {
   inlineMarkup,
   manuscriptCharacterCount,
   manuscriptSheetCount,
+  manuscriptTextWithLineBreaks,
   parseDocument,
   moveParagraphSection,
   findFixMarks,
@@ -53,6 +54,14 @@ test("節の先頭の全角空白を保持する", () => {
 test("文字数は改行とルビ・傍点の記法を除いて数える", () => {
   const source = "題名\n｜白熊《しろくま》と《《流氷》》";
   assert.equal(manuscriptCharacterCount(source), 7);
+});
+test("校正注記用の本文は記法を除いて改行を保持する", () => {
+  assert.equal(
+    manuscriptTextWithLineBreaks(
+      "｜白熊《しろくま》が歩く。\n《《流氷》》を見る。",
+    ),
+    "白熊が歩く。\n流氷を見る。",
+  );
 });
 test("修正マークを一覧化し、プレビューと文字数から除外する", () => {
   const source = "題名\n\n白熊が歩く。#fix[足跡の描写を足す]";

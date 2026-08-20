@@ -196,6 +196,14 @@ export function manuscriptText(input) {
   return text.replaceAll("\n", "");
 }
 
+export function manuscriptTextWithLineBreaks(input) {
+  return input
+    .replaceAll("\r\n", "\n")
+    .split("\n")
+    .map((line) => manuscriptText(line))
+    .join("\n");
+}
+
 export function manuscriptCharacterCount(input) {
   return [...manuscriptText(input)].length;
 }
