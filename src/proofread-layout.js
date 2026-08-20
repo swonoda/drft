@@ -164,6 +164,27 @@ export function findInlineProofreadPosition({
     : null;
 }
 
+export function numberLongProofreadNotes(changes, maximumCharacters = 300) {
+  let appendixNumber = 0;
+  return changes.map((change) => {
+    const note = String(change.note || "");
+    const noteLength = [...note.replaceAll("\n", "")].length;
+    if (
+      (change.type === "add" || change.type === "replace") &&
+      noteLength > maximumCharacters
+    ) {
+      appendixNumber += 1;
+      return {
+        ...change,
+        note: `※${appendixNumber}`,
+        appendixNumber,
+        appendixNote: note,
+      };
+    }
+    return change;
+  });
+}
+
 export function proofreadLeaderPoints({
   anchor,
   position,

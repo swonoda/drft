@@ -7,6 +7,7 @@ import {
   findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
+  numberLongProofreadNotes,
   proofreadLeaderPoints,
 } from "./proofread-layout.js";
 import {
@@ -104,20 +105,22 @@ function afterPreviewLayout(callback) {
 
 function visibleProofreadChanges(text, changes) {
   const normalized = text.replaceAll("\r\n", "\n");
-  return changes
-    .map((change) => ({
-      ...change,
-      start: manuscriptText(normalized.slice(0, change.start)).length,
-      end: manuscriptText(normalized.slice(0, change.end)).length,
-      note:
-        change.type === "replace" || change.type === "add"
-          ? manuscriptTextWithLineBreaks(change.replacement || "")
-          : "トル",
-    }))
-    .filter(
-      (change) =>
-        change.note && (change.type === "add" || change.end > change.start),
-    );
+  return numberLongProofreadNotes(
+    changes
+      .map((change) => ({
+        ...change,
+        start: manuscriptText(normalized.slice(0, change.start)).length,
+        end: manuscriptText(normalized.slice(0, change.end)).length,
+        note:
+          change.type === "replace" || change.type === "add"
+            ? manuscriptTextWithLineBreaks(change.replacement || "")
+            : "トル",
+      }))
+      .filter(
+        (change) =>
+          change.note && (change.type === "add" || change.end > change.start),
+      ),
+  );
 }
 
 function applyProofreadChanges(container, text, changes) {
@@ -377,7 +380,10 @@ function positionProofreadNotes(page) {
           x: anchorPageRect.x + anchorPageRect.width / 2,
           y: leaderY,
         },
-        { x: inlinePosition.x - 1, y: leaderY },
+        {
+          x: inlinePosition.x + inlinePosition.width / 2,
+          y: leaderY,
+        },
       );
       continue;
     }
@@ -405,7 +411,6 @@ function positionProofreadNotes(page) {
     occupied.push(position);
     appendLeader(anchor, position, {
       metrics,
-      gutterOnly: true,
       armDirection: 1,
     });
   }
@@ -792,7 +797,7 @@ function buildProofPdfHtml(settings) {
   pages.style.setProperty("--proof-margin-left", `${marginLeftMm}mm`);
 
   const sheet = document.createElement("section");
-  sheet.className = "proof-sheet";
+  sheet.className = "proof-sheet proof-content-sheet";
   const page = displayedPage.cloneNode(true);
   page.classList.add("proof-page");
   page.style.visibility = "visible";
@@ -804,6 +809,43 @@ function buildProofPdfHtml(settings) {
   frame.append(page);
   sheet.append(frame);
   pages.append(sheet);
+
+  const appendixChanges = visibleProofreadChanges(
+    currentState.left.text,
+    currentState.proofreadChanges || [],
+  ).filter((change) => change.appendixNumber);
+  if (appendixChanges.length) {
+    const appendixSheet = document.createElement("section");
+    appendixSheet.className = "proof-sheet proof-appendix-sheet";
+    const appendixFrame = document.createElement("div");
+    appendixFrame.className = "proof-page-frame";
+    const appendixPage = displayedPage.cloneNode(true);
+    appendixPage.classList.add("proof-page");
+    appendixPage.style.visibility = "visible";
+    appendixPage.querySelector(".proofread-note-layer")?.remove();
+    const appendixContent = appendixPage.querySelector(".preview-page-content");
+    appendixContent.className =
+      "preview-page-content proofread-appendix-content";
+    appendixContent.replaceChildren();
+    appendixContent.dataset.proofreadChanges = "[]";
+    appendixContent.style.transform = "translateX(var(--proof-content-offset))";
+    const appendix = document.createElement("section");
+    appendix.className = "proofread-appendix";
+    for (const change of appendixChanges) {
+      const entry = document.createElement("article");
+      entry.className = "proofread-appendix-entry";
+      const heading = document.createElement("h2");
+      heading.textContent = `※${change.appendixNumber}`;
+      const note = document.createElement("p");
+      note.textContent = change.appendixNote;
+      entry.append(heading, note);
+      appendix.append(entry);
+    }
+    appendixContent.append(appendix);
+    appendixFrame.append(appendixPage);
+    appendixSheet.append(appendixFrame);
+    pages.append(appendixSheet);
+  }
 
   const printCss = `
     @page { size: A5 portrait; margin: 0; }
@@ -836,6 +878,8 @@ function buildProofPdfHtml(settings) {
       transform-origin: top left;
     }
     .proof-page::after { border: 0; }
+    body[data-proof-target="content"] .proof-appendix-sheet,
+    body[data-proof-target="appendix"] .proof-content-sheet { display: none; }
     .proof-separate-title .preview-page-content > h1 {
       box-sizing: border-box;
       display: flex;
@@ -849,7 +893,7 @@ function buildProofPdfHtml(settings) {
     }
   `;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body data-proof-target="content">${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
     bodyWidth,
     ...settings,
   };

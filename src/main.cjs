@@ -496,38 +496,66 @@ async function renderProofSpreadPdf(html, bodyWidth, pageSettings) {
       `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
     );
     await pdfWin.webContents.executeJavaScript("document.fonts.ready");
-    const contentPageCount = await pdfWin.webContents.executeJavaScript(`
+    const pageCounts = await pdfWin.webContents.executeJavaScript(`
       (() => {
-        const content = document.querySelector(".preview-page-content");
+        document.body.dataset.proofTarget = "content";
+        const content = document.querySelector(
+          ".proof-content-sheet .preview-page-content"
+        );
         if (!content) throw new Error("校正原稿の本文を読み込めません");
-        return Math.max(
+        const contentPageCount = Math.max(
           1,
           Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
         );
+        const appendix = document.querySelector(
+          ".proof-appendix-sheet .proofread-appendix-content"
+        );
+        if (!appendix) return { content: contentPageCount, appendix: 0 };
+        document.body.dataset.proofTarget = "appendix";
+        const appendixPageCount = Math.max(
+          1,
+          Math.ceil((appendix.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
+        );
+        document.body.dataset.proofTarget = "content";
+        return { content: contentPageCount, appendix: appendixPageCount };
       })()
     `);
     const singlePages = [];
-    for (let pageIndex = 0; pageIndex < contentPageCount; pageIndex++) {
-      const offset = `${pageIndex * bodyWidth}px`;
-      await pdfWin.webContents.executeJavaScript(`
-        document.querySelector(".proof-pages").style.setProperty(
-          "--proof-content-offset",
-          ${JSON.stringify(offset)}
+    for (const target of ["content", "appendix"]) {
+      for (let pageIndex = 0; pageIndex < pageCounts[target]; pageIndex++) {
+        const offset = `${pageIndex * bodyWidth}px`;
+        await pdfWin.webContents.executeJavaScript(`
+          document.body.dataset.proofTarget = ${JSON.stringify(target)};
+          const sheet = document.querySelector(
+            ${JSON.stringify(
+              target === "content"
+                ? ".proof-content-sheet"
+                : ".proof-appendix-sheet",
+            )}
+          );
+          sheet.style.setProperty(
+            "--proof-content-offset",
+            ${JSON.stringify(offset)}
+          );
+          new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (${JSON.stringify(target)} === "content") {
+              window.positionProofreadNotes?.(
+                sheet.querySelector(".proof-page")
+              );
+            }
+            requestAnimationFrame(resolve);
+          })));
+        `);
+        singlePages.push(
+          await pdfWin.webContents.printToPDF({
+            printBackground: true,
+            preferCSSPageSize: true,
+          }),
         );
-        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-          window.positionProofreadNotes?.(document.querySelector(".proof-page"));
-          requestAnimationFrame(resolve);
-        })));
-      `);
-      singlePages.push(
-        await pdfWin.webContents.printToPDF({
-          printBackground: true,
-          preferCSSPageSize: true,
-        }),
-      );
+      }
     }
     const pagePlan = proofPdfPagePlan({
-      contentPageCount,
+      contentPageCount: pageCounts.content + pageCounts.appendix,
       ...pageSettings,
     });
     return imposeRightBoundLogicalPages(

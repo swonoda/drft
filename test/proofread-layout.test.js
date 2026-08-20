@@ -4,6 +4,7 @@ import {
   findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
+  numberLongProofreadNotes,
   proofreadLeaderPoints,
 } from "../src/proofread-layout.js";
 
@@ -128,6 +129,22 @@ test("行間やページ下端へ収まらない置換文字は欄外配置へ�
   );
 });
 
+test("300字を超える追加と置換は本文末尾の追記番号へ置き換える", () => {
+  const changes = numberLongProofreadNotes([
+    { type: "add", note: "あ".repeat(300) },
+    { type: "replace", note: "い".repeat(301) },
+    { type: "delete", note: "トル" },
+    { type: "add", note: `${"う".repeat(180)}\n${"え".repeat(121)}` },
+  ]);
+  assert.equal(changes[0].note.length, 300);
+  assert.equal(changes[0].appendixNumber, undefined);
+  assert.equal(changes[1].note, "※1");
+  assert.equal(changes[1].appendixNote.length, 301);
+  assert.equal(changes[2].appendixNumber, undefined);
+  assert.equal(changes[3].note, "※2");
+  assert.equal(changes[3].appendixNote.includes("\n"), true);
+});
+
 test("上余白への引出線は始点の横へ短く出してから上へ曲げる", () => {
   assert.deepEqual(
     proofreadLeaderPoints({
@@ -180,20 +197,20 @@ test("左右余白への引出線も始点側に折れを作る", () => {
   );
 });
 
-test("置換の引出線は右の行間へ出たあと注記側へ戻らない", () => {
+test("置換の引出線は右の行間へ出たあと注記まで接続する", () => {
   assert.deepEqual(
     proofreadLeaderPoints({
       anchor: { x: 50, y: 48 },
       position: { x: 45, y: 75, width: 10, height: 20 },
       pageHeight: 100,
       armLength: 8,
-      gutterOnly: true,
       armDirection: 1,
     }),
     [
       { x: 50, y: 48 },
       { x: 58, y: 48 },
       { x: 58, y: 75 },
+      { x: 50, y: 75 },
     ],
   );
 });
