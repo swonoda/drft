@@ -497,39 +497,61 @@ async function renderProofSpreadPdf(
     webPreferences: { sandbox: true },
   });
   try {
-    const renderPages = async (sourceHtml, positionNotes) => {
-      await pdfWin.loadURL(
-        `data:text/html;charset=utf-8,${encodeURIComponent(sourceHtml)}`,
-      );
-      await pdfWin.webContents.executeJavaScript("document.fonts.ready");
-      const pageCount = await pdfWin.webContents.executeJavaScript(`
-        (() => {
-          const content = document.querySelector(".preview-page-content");
-          if (!content) throw new Error("校正原稿を読み込めません");
-          return Math.max(
-            1,
-            Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
-          );
-        })()
-      `);
+    const renderPages = async (sourceHtml, positionNotes, label) => {
+      try {
+        await pdfWin.loadURL(
+          `data:text/html;charset=utf-8,${encodeURIComponent(sourceHtml)}`,
+        );
+        await pdfWin.webContents.executeJavaScript("document.fonts.ready");
+      } catch (error) {
+        throw new Error(`${label}を読み込めません: ${error.message}`);
+      }
+      let pageCount;
+      try {
+        pageCount = await pdfWin.webContents.executeJavaScript(`
+          (() => {
+            const content = document.querySelector(".preview-page-content");
+            if (!content) return null;
+            return Math.max(
+              1,
+              Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
+            );
+          })()
+        `);
+      } catch (error) {
+        throw new Error(`${label}のページ数を計算できません: ${error.message}`);
+      }
+      if (!Number.isFinite(pageCount) || pageCount < 1) {
+        throw new Error(`${label}の本文領域が見つかりません`);
+      }
       const renderedPages = [];
       for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
         const offset = `${pageIndex * bodyWidth}px`;
-        await pdfWin.webContents.executeJavaScript(`
-          const pages = document.querySelector(".proof-pages");
-          pages.style.setProperty(
-            "--proof-content-offset",
-            ${JSON.stringify(offset)}
-          );
-          new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (${JSON.stringify(positionNotes)}) {
-              window.positionProofreadNotes?.(
-                document.querySelector(".proof-page")
+        try {
+          await pdfWin.webContents.executeJavaScript(`
+            (() => {
+              const pages = document.querySelector(".proof-pages");
+              const page = document.querySelector(".proof-page");
+              if (!pages || !page) return Promise.reject(
+                new Error("印刷ページが見つかりません")
               );
-            }
-            requestAnimationFrame(resolve);
-          })));
-        `);
+              pages.style.setProperty(
+                "--proof-content-offset",
+                ${JSON.stringify(offset)}
+              );
+              return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (${JSON.stringify(positionNotes)}) {
+                  window.positionProofreadNotes?.(page);
+                }
+                requestAnimationFrame(resolve);
+              })));
+            })()
+          `);
+        } catch (error) {
+          throw new Error(
+            `${label}${pageIndex + 1}ページ目を組版できません: ${error.message}`,
+          );
+        }
         renderedPages.push(
           await pdfWin.webContents.printToPDF({
             printBackground: true,
@@ -539,9 +561,9 @@ async function renderProofSpreadPdf(
       }
       return renderedPages;
     };
-    const singlePages = await renderPages(html, true);
+    const singlePages = await renderPages(html, true, "本文");
     if (typeof appendixHtml === "string" && appendixHtml) {
-      singlePages.push(...(await renderPages(appendixHtml, false)));
+      singlePages.push(...(await renderPages(appendixHtml, false, "追記")));
     }
     const pagePlan = proofPdfPagePlan({
       contentPageCount: singlePages.length,
