@@ -679,6 +679,7 @@ function proofPdfSettings() {
       localStorage.getItem("diffPreview.proofBodyParity") === "odd"
         ? "odd"
         : "even",
+    cropMarks: localStorage.getItem("diffPreview.proofCropMarks") === "true",
   };
 }
 
@@ -691,6 +692,7 @@ function fillProofPdfSettings() {
   $("proofSeparateTitle").checked = settings.separateTitle;
   $("proofTitleParity").value = settings.titleParity;
   $("proofBodyParity").value = settings.bodyParity;
+  $("proofCropMarks").checked = settings.cropMarks;
   syncProofTitleControls();
 }
 
@@ -699,6 +701,7 @@ function saveProofPdfSettings() {
     separateTitle: $("proofSeparateTitle").checked,
     titleParity: $("proofTitleParity").value,
     bodyParity: $("proofBodyParity").value,
+    cropMarks: $("proofCropMarks").checked,
   };
   localStorage.setItem(
     "diffPreview.proofSeparateTitle",
@@ -706,6 +709,10 @@ function saveProofPdfSettings() {
   );
   localStorage.setItem("diffPreview.proofTitleParity", settings.titleParity);
   localStorage.setItem("diffPreview.proofBodyParity", settings.bodyParity);
+  localStorage.setItem(
+    "diffPreview.proofCropMarks",
+    String(settings.cropMarks),
+  );
   return settings;
 }
 
@@ -749,8 +756,9 @@ function buildProofPdfHtml(settings) {
   sheet.append(frame);
   pages.append(sheet);
 
+  const pageMarks = settings.cropMarks ? "marks: crop cross; bleed: 3mm;" : "";
   const printCss = `
-    @page { size: A5 portrait; margin: 0; }
+    @page { size: A5 portrait; margin: 0; ${pageMarks} }
     html, body { width: auto; height: auto; margin: 0; overflow: visible; background: #fff; }
     body { display: block; }
     .proof-pages { display: block; min-height: 0; padding: 0; background: #fff; }
