@@ -814,7 +814,11 @@ function buildProofPdfHtml(settings) {
     currentState.left.text,
     currentState.proofreadChanges || [],
   ).filter((change) => change.appendixNumber);
+  let appendixPages = null;
   if (appendixChanges.length) {
+    appendixPages = document.createElement("main");
+    appendixPages.className = "proof-pages";
+    appendixPages.style.cssText = pages.style.cssText;
     const appendixSheet = document.createElement("section");
     appendixSheet.className = "proof-sheet proof-appendix-sheet";
     const appendixFrame = document.createElement("div");
@@ -844,7 +848,7 @@ function buildProofPdfHtml(settings) {
     appendixContent.append(appendix);
     appendixFrame.append(appendixPage);
     appendixSheet.append(appendixFrame);
-    pages.append(appendixSheet);
+    appendixPages.append(appendixSheet);
   }
 
   const printCss = `
@@ -878,8 +882,6 @@ function buildProofPdfHtml(settings) {
       transform-origin: top left;
     }
     .proof-page::after { border: 0; }
-    body[data-proof-target="content"] .proof-appendix-sheet,
-    body[data-proof-target="appendix"] .proof-content-sheet { display: none; }
     .proof-separate-title .preview-page-content > h1 {
       box-sizing: border-box;
       display: flex;
@@ -892,8 +894,12 @@ function buildProofPdfHtml(settings) {
       padding: 0;
     }
   `;
+  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
+  const documentHtml = (contents, includeProofreadScript = false) =>
+    `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${contents.outerHTML}${includeProofreadScript ? proofreadScript : ""}</body></html>`;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body data-proof-target="content">${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: documentHtml(pages, true),
+    appendixHtml: appendixPages ? documentHtml(appendixPages) : null,
     bodyWidth,
     ...settings,
   };
