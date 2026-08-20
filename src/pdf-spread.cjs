@@ -1,5 +1,64 @@
 const { PDFDocument, rgb } = require("pdf-lib");
 
+const POINTS_PER_MM = 72 / 25.4;
+const PRINT_MARK_MARGIN = 10 * POINTS_PER_MM;
+const BLEED = 3 * POINTS_PER_MM;
+const MARK_GAP = 1 * POINTS_PER_MM;
+const MARK_LENGTH = 5 * POINTS_PER_MM;
+const CENTER_MARK_OFFSET = 5 * POINTS_PER_MM;
+const CENTER_MARK_HALF = 2.5 * POINTS_PER_MM;
+const MARK_THICKNESS = 0.25;
+
+function drawLine(page, start, end) {
+  page.drawLine({
+    start,
+    end,
+    thickness: MARK_THICKNESS,
+    color: rgb(0, 0, 0),
+  });
+}
+
+function drawCross(page, x, y) {
+  drawLine(
+    page,
+    { x: x - CENTER_MARK_HALF, y },
+    { x: x + CENTER_MARK_HALF, y },
+  );
+  drawLine(
+    page,
+    { x, y: y - CENTER_MARK_HALF },
+    { x, y: y + CENTER_MARK_HALF },
+  );
+}
+
+function drawSpreadPrintMarks(page, trimBox) {
+  const { x: left, y: bottom, width, height } = trimBox;
+  const right = left + width;
+  const top = bottom + height;
+  const leftMarkStart = left - MARK_GAP - MARK_LENGTH;
+  const leftMarkEnd = left - MARK_GAP;
+  const rightMarkStart = right + MARK_GAP;
+  const rightMarkEnd = right + MARK_GAP + MARK_LENGTH;
+  const bottomMarkStart = bottom - MARK_GAP - MARK_LENGTH;
+  const bottomMarkEnd = bottom - MARK_GAP;
+  const topMarkStart = top + MARK_GAP;
+  const topMarkEnd = top + MARK_GAP + MARK_LENGTH;
+
+  for (const y of [bottom, bottom - BLEED, top, top + BLEED]) {
+    drawLine(page, { x: leftMarkStart, y }, { x: leftMarkEnd, y });
+    drawLine(page, { x: rightMarkStart, y }, { x: rightMarkEnd, y });
+  }
+  for (const x of [left, left - BLEED, right, right + BLEED]) {
+    drawLine(page, { x, y: bottomMarkStart }, { x, y: bottomMarkEnd });
+    drawLine(page, { x, y: topMarkStart }, { x, y: topMarkEnd });
+  }
+
+  drawCross(page, left + width / 2, top + CENTER_MARK_OFFSET);
+  drawCross(page, left + width / 2, bottom - CENTER_MARK_OFFSET);
+  drawCross(page, left - CENTER_MARK_OFFSET, bottom + height / 2);
+  drawCross(page, right + CENTER_MARK_OFFSET, bottom + height / 2);
+}
+
 function normalizeParity(value, fallback) {
   return value === "odd" || value === "even" ? value : fallback;
 }
@@ -74,7 +133,10 @@ async function combinePlannedPages(pdfDocuments, pagePlan) {
   return output.save();
 }
 
-async function imposeRightBoundLogicalPages(sourceBytes) {
+async function imposeRightBoundLogicalPages(
+  sourceBytes,
+  { cropMarks = false } = {},
+) {
   const source = await PDFDocument.load(sourceBytes);
   const output = await PDFDocument.create();
   const sourcePages = source.getPages();
@@ -85,13 +147,34 @@ async function imposeRightBoundLogicalPages(sourceBytes) {
     sourcePages.map((_page, index) => index),
   );
   const { width, height } = sourcePages[0].getSize();
+  const spreadWidth = width * 2;
+  const pageOffset = cropMarks ? PRINT_MARK_MARGIN : 0;
+  const outputWidth = spreadWidth + pageOffset * 2;
+  const outputHeight = height + pageOffset * 2;
   let sheet;
   for (let index = 0; index < embedded.length; index++) {
     const logicalPage = index + 1;
-    if (logicalPage % 2 === 1) sheet = output.addPage([width * 2, height]);
+    if (logicalPage % 2 === 1) {
+      sheet = output.addPage([outputWidth, outputHeight]);
+      if (cropMarks) {
+        sheet.setTrimBox(pageOffset, pageOffset, spreadWidth, height);
+        sheet.setBleedBox(
+          pageOffset - BLEED,
+          pageOffset - BLEED,
+          spreadWidth + BLEED * 2,
+          height + BLEED * 2,
+        );
+        drawSpreadPrintMarks(sheet, {
+          x: pageOffset,
+          y: pageOffset,
+          width: spreadWidth,
+          height,
+        });
+      }
+    }
     sheet.drawPage(embedded[index], {
-      x: logicalPage % 2 === 0 ? 0 : width,
-      y: 0,
+      x: pageOffset + (logicalPage % 2 === 0 ? 0 : width),
+      y: pageOffset,
       width,
       height,
     });

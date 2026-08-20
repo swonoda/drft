@@ -532,6 +532,7 @@ async function renderProofSpreadPdf(html, bodyWidth, pageSettings) {
     });
     return imposeRightBoundLogicalPages(
       await combinePlannedPages(singlePages, pagePlan),
+      { cropMarks: Boolean(pageSettings.cropMarks) },
     );
   } finally {
     pdfWin.destroy();
@@ -704,6 +705,7 @@ ipcMain.handle("diff:exportProofPdf", async (event, payload) => {
       separateTitle: Boolean(payload.separateTitle),
       titleParity: payload.titleParity,
       bodyParity: payload.bodyParity,
+      cropMarks: Boolean(payload.cropMarks),
     }),
   );
   return file;

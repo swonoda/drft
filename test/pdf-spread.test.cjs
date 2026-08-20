@@ -97,6 +97,39 @@ test("論理ページを右綴じ見開きへ面付けする", async () => {
   }
 });
 
+test("トンボ表示時は見開きの外側へ印刷領域を追加する", async () => {
+  const source = await PDFDocument.create();
+  for (let index = 0; index < 2; index++) {
+    const page = source.addPage([420, 595]);
+    page.drawRectangle({ x: 10, y: 10, width: 20, height: 20 });
+  }
+
+  const result = await PDFDocument.load(
+    await imposeRightBoundLogicalPages(await source.save(), {
+      cropMarks: true,
+    }),
+  );
+  const page = result.getPage(0);
+  const markMargin = (10 * 72) / 25.4;
+  const bleed = (3 * 72) / 25.4;
+
+  assert.equal(result.getPageCount(), 1);
+  assert.ok(Math.abs(page.getWidth() - (840 + markMargin * 2)) < 0.001);
+  assert.ok(Math.abs(page.getHeight() - (595 + markMargin * 2)) < 0.001);
+  assert.deepEqual(page.getTrimBox(), {
+    x: markMargin,
+    y: markMargin,
+    width: 840,
+    height: 595,
+  });
+  assert.deepEqual(page.getBleedBox(), {
+    x: markMargin - bleed,
+    y: markMargin - bleed,
+    width: 840 + bleed * 2,
+    height: 595 + bleed * 2,
+  });
+});
+
 test("A5単ページを右綴じ見開きへ面付けする", async () => {
   const source = await PDFDocument.create();
   for (let index = 0; index < 5; index++) {

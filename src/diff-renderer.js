@@ -756,9 +756,8 @@ function buildProofPdfHtml(settings) {
   sheet.append(frame);
   pages.append(sheet);
 
-  const pageMarks = settings.cropMarks ? "marks: crop cross; bleed: 3mm;" : "";
   const printCss = `
-    @page { size: A5 portrait; margin: 0; ${pageMarks} }
+    @page { size: A5 portrait; margin: 0; }
     html, body { width: auto; height: auto; margin: 0; overflow: visible; background: #fff; }
     body { display: block; }
     .proof-pages { display: block; min-height: 0; padding: 0; background: #fff; }
