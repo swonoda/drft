@@ -125,6 +125,27 @@
           <input id="proofPdfPath" type="text" required />
           <button id="browseProofPdfPath" type="button">参照…</button>
         </div>
+        <fieldset class="proof-pdf-page-settings">
+          <legend>ページ配置</legend>
+          <label class="proof-pdf-checkbox" for="proofSeparateTitle">
+            <input id="proofSeparateTitle" type="checkbox" />
+            タイトルを独立ページにする
+          </label>
+          <label for="proofTitleParity">タイトルページ</label>
+          <select id="proofTitleParity">
+            <option value="odd">奇数ページ（右）</option>
+            <option value="even">偶数ページ（左）</option>
+          </select>
+          <label for="proofBodyParity">本文開始ページ</label>
+          <select id="proofBodyParity">
+            <option value="odd">奇数ページ（右）</option>
+            <option value="even">偶数ページ（左）</option>
+          </select>
+          <label class="proof-pdf-checkbox" for="proofCropMarks">
+            <input id="proofCropMarks" type="checkbox" />
+            トンボ・裁ち落としを表示
+          </label>
+        </fieldset>
         <div class="proof-pdf-dialog-actions">
           <button id="cancelProofPdf" type="button">キャンセル</button>
           <button id="exportProofPdf" type="submit">OK</button>

@@ -2,8 +2,10 @@ const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const {
-  combineFirstPages,
+  combinePlannedPages,
+  imposeRightBoundLogicalPages,
   imposeRightBoundSpreads,
+  proofPdfPagePlan,
 } = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
@@ -484,7 +486,7 @@ async function renderSpreadPdf(html) {
   }
 }
 
-async function renderProofSpreadPdf(html, pageCount, bodyWidth) {
+async function renderProofSpreadPdf(html, bodyWidth, pageSettings) {
   const pdfWin = new BrowserWindow({
     show: false,
     webPreferences: { sandbox: true },
@@ -494,8 +496,18 @@ async function renderProofSpreadPdf(html, pageCount, bodyWidth) {
       `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
     );
     await pdfWin.webContents.executeJavaScript("document.fonts.ready");
+    const contentPageCount = await pdfWin.webContents.executeJavaScript(`
+      (() => {
+        const content = document.querySelector(".preview-page-content");
+        if (!content) throw new Error("校正原稿の本文を読み込めません");
+        return Math.max(
+          1,
+          Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
+        );
+      })()
+    `);
     const singlePages = [];
-    for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+    for (let pageIndex = 0; pageIndex < contentPageCount; pageIndex++) {
       const offset = `${pageIndex * bodyWidth}px`;
       await pdfWin.webContents.executeJavaScript(`
         document.querySelector(".proof-pages").style.setProperty(
@@ -514,7 +526,14 @@ async function renderProofSpreadPdf(html, pageCount, bodyWidth) {
         }),
       );
     }
-    return imposeRightBoundSpreads(await combineFirstPages(singlePages));
+    const pagePlan = proofPdfPagePlan({
+      contentPageCount,
+      ...pageSettings,
+    });
+    return imposeRightBoundLogicalPages(
+      await combinePlannedPages(singlePages, pagePlan),
+      { cropMarks: Boolean(pageSettings.cropMarks) },
+    );
   } finally {
     pdfWin.destroy();
   }
@@ -673,9 +692,6 @@ ipcMain.handle("diff:exportProofPdf", async (event, payload) => {
   if (!payload || typeof payload.html !== "string") {
     throw new Error("縦書きプレビューをPDFへ変換できません");
   }
-  if (!Number.isInteger(payload.pageCount) || payload.pageCount < 1) {
-    throw new Error("PDFへ出力するページ数を取得できません");
-  }
   if (!Number.isFinite(payload.bodyWidth) || payload.bodyWidth <= 0) {
     throw new Error("PDFへ出力する本文幅を取得できません");
   }
@@ -685,11 +701,12 @@ ipcMain.handle("diff:exportProofPdf", async (event, payload) => {
   const file = ensurePdfExtension(payload.filePath.trim());
   await fs.writeFile(
     file,
-    await renderProofSpreadPdf(
-      payload.html,
-      payload.pageCount,
-      payload.bodyWidth,
-    ),
+    await renderProofSpreadPdf(payload.html, payload.bodyWidth, {
+      separateTitle: Boolean(payload.separateTitle),
+      titleParity: payload.titleParity,
+      bodyParity: payload.bodyParity,
+      cropMarks: Boolean(payload.cropMarks),
+    }),
   );
   return file;
 });

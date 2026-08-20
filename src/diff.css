@@ -650,6 +650,7 @@ body {
 }
 
 .proof-pdf-path-row input,
+.proof-pdf-page-settings select,
 .proof-pdf-dialog button {
   min-height: 34px;
   border: 1px solid #d8e0ef;
@@ -662,6 +663,50 @@ body {
 .proof-pdf-path-row input {
   min-width: 0;
   padding: 6px 9px;
+}
+
+.proof-pdf-page-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 0;
+  padding: 14px;
+  border: 1px solid #e2e7f1;
+  border-radius: 8px;
+}
+
+.proof-pdf-page-settings legend {
+  padding: 0 5px;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.proof-pdf-page-settings select {
+  min-width: 0;
+  padding: 6px 28px 6px 9px;
+}
+
+.proof-pdf-page-settings select:disabled {
+  color: #9aa5b8;
+  background: #f4f6fa;
+}
+
+.proof-pdf-checkbox {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #405171;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.proof-pdf-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
 }
 
 .proof-pdf-dialog button {

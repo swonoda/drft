@@ -667,16 +667,66 @@ function stylesheetText() {
     .join("\n");
 }
 
-function buildProofPdfHtml() {
+function proofPdfSettings() {
+  return {
+    separateTitle:
+      localStorage.getItem("diffPreview.proofSeparateTitle") === "true",
+    titleParity:
+      localStorage.getItem("diffPreview.proofTitleParity") === "even"
+        ? "even"
+        : "odd",
+    bodyParity:
+      localStorage.getItem("diffPreview.proofBodyParity") === "odd"
+        ? "odd"
+        : "even",
+    cropMarks: localStorage.getItem("diffPreview.proofCropMarks") === "true",
+  };
+}
+
+function syncProofTitleControls() {
+  $("proofTitleParity").disabled = !$("proofSeparateTitle").checked;
+}
+
+function fillProofPdfSettings() {
+  const settings = proofPdfSettings();
+  $("proofSeparateTitle").checked = settings.separateTitle;
+  $("proofTitleParity").value = settings.titleParity;
+  $("proofBodyParity").value = settings.bodyParity;
+  $("proofCropMarks").checked = settings.cropMarks;
+  syncProofTitleControls();
+}
+
+function saveProofPdfSettings() {
+  const settings = {
+    separateTitle: $("proofSeparateTitle").checked,
+    titleParity: $("proofTitleParity").value,
+    bodyParity: $("proofBodyParity").value,
+    cropMarks: $("proofCropMarks").checked,
+  };
+  localStorage.setItem(
+    "diffPreview.proofSeparateTitle",
+    String(settings.separateTitle),
+  );
+  localStorage.setItem("diffPreview.proofTitleParity", settings.titleParity);
+  localStorage.setItem("diffPreview.proofBodyParity", settings.bodyParity);
+  localStorage.setItem(
+    "diffPreview.proofCropMarks",
+    String(settings.cropMarks),
+  );
+  return settings;
+}
+
+function buildProofPdfHtml(settings) {
   const displayedPage = oldPreview.querySelector(".preview-page:last-child");
   if (!proofPdfPreview || !displayedPage) {
     throw new Error("縦書きプレビューを表示してください");
   }
-  const { bodyWidth, pageWidth, pageHeight, pageCount } = proofPdfPreview;
+  const { bodyWidth, pageWidth, pageHeight } = proofPdfPreview;
   const { marginTopMm, marginRightMm, marginBottomMm, marginLeftMm } =
     proofPdfLayout;
   const pages = document.createElement("main");
   pages.className = "proof-pages";
+  pages.classList.toggle("proof-separate-title", settings.separateTitle);
   pages.style.cssText = oldPreview.style.cssText;
   const availableWidth = ((148 - marginRightMm - marginLeftMm) / 25.4) * 96;
   const availableHeight = ((210 - marginTopMm - marginBottomMm) / 25.4) * 96;
@@ -737,17 +787,29 @@ function buildProofPdfHtml() {
       transform-origin: top left;
     }
     .proof-page::after { border: 0; }
+    .proof-separate-title .preview-page-content > h1 {
+      box-sizing: border-box;
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: var(--diff-preview-body-width);
+      height: var(--diff-preview-body-height);
+      margin: 0;
+      padding: 0;
+    }
   `;
   return {
     html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
-    pageCount,
     bodyWidth,
+    ...settings,
   };
 }
 
 async function openProofPdfDialog() {
   try {
     $("proofPdfPath").value = await window.diffApi.proofPdfDefaultPath();
+    fillProofPdfSettings();
     proofPdfDialog.showModal();
   } catch (error) {
     $("status").textContent = `PDFを出力できません: ${error.message}`;
@@ -755,6 +817,7 @@ async function openProofPdfDialog() {
 }
 
 proofPdfButton.onclick = openProofPdfDialog;
+$("proofSeparateTitle").addEventListener("change", syncProofTitleControls);
 $("browseProofPdfPath").onclick = async () => {
   const file = await window.diffApi.chooseProofPdfPath($("proofPdfPath").value);
   if (file) $("proofPdfPath").value = file;
@@ -766,7 +829,7 @@ $("proofPdfForm").addEventListener("submit", async (event) => {
   submit.disabled = true;
   $("status").textContent = "朱入り原稿PDFを作成しています…";
   try {
-    const proofPdf = buildProofPdfHtml();
+    const proofPdf = buildProofPdfHtml(saveProofPdfSettings());
     const file = await window.diffApi.exportProofPdf({
       filePath: $("proofPdfPath").value,
       ...proofPdf,
