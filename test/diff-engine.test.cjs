@@ -67,6 +67,49 @@ test("隣接する削除と追加を置き換え指定へ変換する", () => {
   ]);
 });
 
+test("単語途中の偶然一致は前後をまとめて一つの置換にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "紫と緑のまだらに染まった。",
+      "あくまでシルエットが見えた。",
+    ),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 11,
+        removed: "紫と緑のまだらに染まっ",
+        replacement: "あくまでシルエットが見え",
+        type: "replace",
+      },
+    ],
+  );
+});
+
+test("単語境界をまたぐ離れた変更は別々の置換として残す", () => {
+  assert.deepEqual(
+    buildProofreadChanges("私は青い海を見る。", "彼は青い山を見る。"),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 1,
+        removed: "私",
+        replacement: "彼",
+        type: "replace",
+      },
+      {
+        id: 2,
+        start: 4,
+        end: 5,
+        removed: "海",
+        replacement: "山",
+        type: "replace",
+      },
+    ],
+  );
+});
+
 test("追加だけの変更は文字間への挿入指示へ変換する", () => {
   assert.deepEqual(buildProofreadChanges("白熊。", "大きな白熊。"), [
     {
@@ -109,6 +152,41 @@ test("追加された行は直前の行と直後の行の間を挿入位置に�
         end: 4,
         removed: "",
         replacement: "追加する行",
+        type: "add",
+      },
+    ],
+  );
+});
+
+test("同じ位置へ連続する追加文は一つの追加ブロックにまとめる", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "前の文。後の文。",
+      "前の文。長い追加一。長い追加二。後の文。",
+    ),
+    [
+      {
+        id: 1,
+        start: 4,
+        end: 4,
+        removed: "",
+        replacement: "長い追加一。長い追加二。",
+        type: "add",
+      },
+    ],
+  );
+});
+
+test("連続して追加された行は改行を保った一つのブロックにする", () => {
+  assert.deepEqual(
+    buildProofreadChanges("前の行\n後の行", "前の行\n追加一\n追加二\n後の行"),
+    [
+      {
+        id: 1,
+        start: 4,
+        end: 4,
+        removed: "",
+        replacement: "追加一\n追加二",
         type: "add",
       },
     ],

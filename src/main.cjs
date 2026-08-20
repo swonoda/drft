@@ -486,48 +486,87 @@ async function renderSpreadPdf(html) {
   }
 }
 
-async function renderProofSpreadPdf(html, bodyWidth, pageSettings) {
+async function renderProofSpreadPdf(
+  html,
+  appendixHtml,
+  bodyWidth,
+  pageSettings,
+) {
   const pdfWin = new BrowserWindow({
     show: false,
     webPreferences: { sandbox: true },
   });
   try {
-    await pdfWin.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
-    );
-    await pdfWin.webContents.executeJavaScript("document.fonts.ready");
-    const contentPageCount = await pdfWin.webContents.executeJavaScript(`
-      (() => {
-        const content = document.querySelector(".preview-page-content");
-        if (!content) throw new Error("校正原稿の本文を読み込めません");
-        return Math.max(
-          1,
-          Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
+    const renderPages = async (sourceHtml, positionNotes, label) => {
+      try {
+        await pdfWin.loadURL(
+          `data:text/html;charset=utf-8,${encodeURIComponent(sourceHtml)}`,
         );
-      })()
-    `);
-    const singlePages = [];
-    for (let pageIndex = 0; pageIndex < contentPageCount; pageIndex++) {
-      const offset = `${pageIndex * bodyWidth}px`;
-      await pdfWin.webContents.executeJavaScript(`
-        document.querySelector(".proof-pages").style.setProperty(
-          "--proof-content-offset",
-          ${JSON.stringify(offset)}
+        await pdfWin.webContents.executeJavaScript("document.fonts.ready");
+      } catch (error) {
+        throw new Error(`${label}を読み込めません: ${error.message}`);
+      }
+      let pageCount;
+      try {
+        pageCount = await pdfWin.webContents.executeJavaScript(`
+          (() => {
+            const content = document.querySelector(".preview-page-content");
+            if (!content) return null;
+            return Math.max(
+              1,
+              Math.ceil((content.scrollWidth - 1) / ${JSON.stringify(bodyWidth)})
+            );
+          })()
+        `);
+      } catch (error) {
+        throw new Error(`${label}のページ数を計算できません: ${error.message}`);
+      }
+      if (!Number.isFinite(pageCount) || pageCount < 1) {
+        throw new Error(`${label}の本文領域が見つかりません`);
+      }
+      const renderedPages = [];
+      for (let pageIndex = 0; pageIndex < pageCount; pageIndex++) {
+        const offset = `${pageIndex * bodyWidth}px`;
+        try {
+          await pdfWin.webContents.executeJavaScript(`
+            (() => {
+              const pages = document.querySelector(".proof-pages");
+              const page = document.querySelector(".proof-page");
+              if (!pages || !page) return Promise.reject(
+                new Error("印刷ページが見つかりません")
+              );
+              pages.style.setProperty(
+                "--proof-content-offset",
+                ${JSON.stringify(offset)}
+              );
+              return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (${JSON.stringify(positionNotes)}) {
+                  window.positionProofreadNotes?.(page);
+                }
+                requestAnimationFrame(resolve);
+              })));
+            })()
+          `);
+        } catch (error) {
+          throw new Error(
+            `${label}${pageIndex + 1}ページ目を組版できません: ${error.message}`,
+          );
+        }
+        renderedPages.push(
+          await pdfWin.webContents.printToPDF({
+            printBackground: true,
+            preferCSSPageSize: true,
+          }),
         );
-        new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
-          window.positionProofreadNotes?.(document.querySelector(".proof-page"));
-          requestAnimationFrame(resolve);
-        })));
-      `);
-      singlePages.push(
-        await pdfWin.webContents.printToPDF({
-          printBackground: true,
-          preferCSSPageSize: true,
-        }),
-      );
+      }
+      return renderedPages;
+    };
+    const singlePages = await renderPages(html, true, "本文");
+    if (typeof appendixHtml === "string" && appendixHtml) {
+      singlePages.push(...(await renderPages(appendixHtml, false, "追記")));
     }
     const pagePlan = proofPdfPagePlan({
-      contentPageCount,
+      contentPageCount: singlePages.length,
       ...pageSettings,
     });
     return imposeRightBoundLogicalPages(
@@ -701,12 +740,17 @@ ipcMain.handle("diff:exportProofPdf", async (event, payload) => {
   const file = ensurePdfExtension(payload.filePath.trim());
   await fs.writeFile(
     file,
-    await renderProofSpreadPdf(payload.html, payload.bodyWidth, {
-      separateTitle: Boolean(payload.separateTitle),
-      titleParity: payload.titleParity,
-      bodyParity: payload.bodyParity,
-      cropMarks: Boolean(payload.cropMarks),
-    }),
+    await renderProofSpreadPdf(
+      payload.html,
+      payload.appendixHtml,
+      payload.bodyWidth,
+      {
+        separateTitle: Boolean(payload.separateTitle),
+        titleParity: payload.titleParity,
+        bodyParity: payload.bodyParity,
+        cropMarks: Boolean(payload.cropMarks),
+      },
+    ),
   );
   return file;
 });

@@ -1,7 +1,13 @@
-import { manuscriptText, renderPreviewDocument } from "./parser.js";
 import {
+  manuscriptText,
+  manuscriptTextWithLineBreaks,
+  renderPreviewDocument,
+} from "./parser.js";
+import {
+  findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
+  numberLongProofreadNotes,
   proofreadLeaderPoints,
 } from "./proofread-layout.js";
 import {
@@ -99,20 +105,22 @@ function afterPreviewLayout(callback) {
 
 function visibleProofreadChanges(text, changes) {
   const normalized = text.replaceAll("\r\n", "\n");
-  return changes
-    .map((change) => ({
-      ...change,
-      start: manuscriptText(normalized.slice(0, change.start)).length,
-      end: manuscriptText(normalized.slice(0, change.end)).length,
-      note:
-        change.type === "replace" || change.type === "add"
-          ? manuscriptText(change.replacement || "")
-          : "トル",
-    }))
-    .filter(
-      (change) =>
-        change.note && (change.type === "add" || change.end > change.start),
-    );
+  return numberLongProofreadNotes(
+    changes
+      .map((change) => ({
+        ...change,
+        start: manuscriptText(normalized.slice(0, change.start)).length,
+        end: manuscriptText(normalized.slice(0, change.end)).length,
+        note:
+          change.type === "replace" || change.type === "add"
+            ? manuscriptTextWithLineBreaks(change.replacement || "")
+            : "トル",
+      }))
+      .filter(
+        (change) =>
+          change.note && (change.type === "add" || change.end > change.start),
+      ),
+  );
 }
 
 function applyProofreadChanges(container, text, changes) {
@@ -201,6 +209,15 @@ function positionProofreadNotes(page) {
     );
     leaderSvg.append(leader);
   };
+  const appendStraightLeader = (start, end) => {
+    const leader = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "polyline",
+    );
+    leaderIndex++;
+    leader.setAttribute("points", `${start.x},${start.y} ${end.x},${end.y}`);
+    leaderSvg.append(leader);
+  };
   const insertionPoint = (changeOffset) => {
     const item =
       nodes.find(
@@ -262,6 +279,32 @@ function positionProofreadNotes(page) {
       note.className = "proofread-note proofread-note-add";
       note.textContent = change.note;
       note.style.fontSize = `${fontSize}px`;
+      const noteLines = note.textContent
+        .split("\n")
+        .map((line) => [...line].length);
+      if (noteLines.length > 1 || noteLines[0] > 20) {
+        const blockPosition = findProofreadBlockPosition({
+          pageWidth: page.offsetWidth,
+          pageHeight: page.offsetHeight,
+          noteLines,
+          baseFontSize: fontSize,
+          anchor: insertion.anchor,
+          occupied,
+          gap: Math.max(3, fontSize * 0.2),
+          step: Math.max(4, fontSize * 0.35),
+        });
+        if (blockPosition) {
+          note.classList.add("proofread-note-block");
+          note.style.top = `${blockPosition.y}px`;
+          note.style.left = `${blockPosition.x}px`;
+          note.style.width = `${blockPosition.width}px`;
+          note.style.height = `${blockPosition.height}px`;
+          layer.append(note);
+          occupied.push(blockPosition);
+          appendLeader(insertion.anchor, blockPosition);
+          continue;
+        }
+      }
       const position = findProofreadNotePosition({
         pageWidth: page.offsetWidth,
         pageHeight: page.offsetHeight,
@@ -330,6 +373,18 @@ function positionProofreadNotes(page) {
       note.style.left = `${inlinePosition.x}px`;
       layer.append(note);
       occupied.push(inlinePosition);
+      const leaderY =
+        anchorPageRect.y + Math.min(anchorPageRect.height, fontSize) * 0.5;
+      appendStraightLeader(
+        {
+          x: anchorPageRect.x + anchorPageRect.width / 2,
+          y: leaderY,
+        },
+        {
+          x: inlinePosition.x + inlinePosition.width / 2,
+          y: leaderY,
+        },
+      );
       continue;
     }
 
@@ -356,7 +411,6 @@ function positionProofreadNotes(page) {
     occupied.push(position);
     appendLeader(anchor, position, {
       metrics,
-      gutterOnly: true,
       armDirection: 1,
     });
   }
@@ -743,7 +797,7 @@ function buildProofPdfHtml(settings) {
   pages.style.setProperty("--proof-margin-left", `${marginLeftMm}mm`);
 
   const sheet = document.createElement("section");
-  sheet.className = "proof-sheet";
+  sheet.className = "proof-sheet proof-content-sheet";
   const page = displayedPage.cloneNode(true);
   page.classList.add("proof-page");
   page.style.visibility = "visible";
@@ -755,6 +809,47 @@ function buildProofPdfHtml(settings) {
   frame.append(page);
   sheet.append(frame);
   pages.append(sheet);
+
+  const appendixChanges = visibleProofreadChanges(
+    currentState.left.text,
+    currentState.proofreadChanges || [],
+  ).filter((change) => change.appendixNumber);
+  let appendixPages = null;
+  if (appendixChanges.length) {
+    appendixPages = document.createElement("main");
+    appendixPages.className = "proof-pages";
+    appendixPages.style.cssText = pages.style.cssText;
+    const appendixSheet = document.createElement("section");
+    appendixSheet.className = "proof-sheet proof-appendix-sheet";
+    const appendixFrame = document.createElement("div");
+    appendixFrame.className = "proof-page-frame";
+    const appendixPage = displayedPage.cloneNode(true);
+    appendixPage.classList.add("proof-page");
+    appendixPage.style.visibility = "visible";
+    appendixPage.querySelector(".proofread-note-layer")?.remove();
+    const appendixContent = appendixPage.querySelector(".preview-page-content");
+    appendixContent.className =
+      "preview-page-content proofread-appendix-content";
+    appendixContent.replaceChildren();
+    appendixContent.dataset.proofreadChanges = "[]";
+    appendixContent.style.transform = "translateX(var(--proof-content-offset))";
+    const appendix = document.createElement("section");
+    appendix.className = "proofread-appendix";
+    for (const change of appendixChanges) {
+      const entry = document.createElement("article");
+      entry.className = "proofread-appendix-entry";
+      const heading = document.createElement("h2");
+      heading.textContent = `※${change.appendixNumber}`;
+      const note = document.createElement("p");
+      note.textContent = change.appendixNote;
+      entry.append(heading, note);
+      appendix.append(entry);
+    }
+    appendixContent.append(appendix);
+    appendixFrame.append(appendixPage);
+    appendixSheet.append(appendixFrame);
+    appendixPages.append(appendixSheet);
+  }
 
   const printCss = `
     @page { size: A5 portrait; margin: 0; }
@@ -799,8 +894,12 @@ function buildProofPdfHtml(settings) {
       padding: 0;
     }
   `;
+  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
+  const documentHtml = (contents, includeProofreadScript = false) =>
+    `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${contents.outerHTML}${includeProofreadScript ? proofreadScript : ""}</body></html>`;
   return {
-    html: `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${pages.outerHTML}<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script></body></html>`,
+    html: documentHtml(pages, true),
+    appendixHtml: appendixPages ? documentHtml(appendixPages) : null,
     bodyWidth,
     ...settings,
   };

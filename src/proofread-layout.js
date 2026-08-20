@@ -7,6 +7,7 @@ export function findProofreadNotePosition({
   occupied,
   gap = 4,
   step = 6,
+  allowOverlapFallback = true,
 }) {
   const overlaps = (a, b) =>
     !(
@@ -32,16 +33,84 @@ export function findProofreadNotePosition({
     }
   }
   candidates.sort((a, b) => a.distance - b.distance || b.y - a.y);
-  return (
-    candidates.find((candidate) =>
-      occupied.every((rect) => !overlaps(candidate, rect)),
-    ) || {
-      x: Math.max(gap, Math.min(pageWidth - width - gap, anchor.x + gap)),
-      y: Math.max(gap, Math.min(pageHeight - height - gap, anchor.y)),
-      width,
-      height,
-    }
+  const available = candidates.find((candidate) =>
+    occupied.every((rect) => !overlaps(candidate, rect)),
   );
+  if (available || !allowOverlapFallback) return available || null;
+  return {
+    x: Math.max(gap, Math.min(pageWidth - width - gap, anchor.x + gap)),
+    y: Math.max(gap, Math.min(pageHeight - height - gap, anchor.y)),
+    width,
+    height,
+  };
+}
+
+export function findProofreadBlockPosition({
+  pageWidth,
+  pageHeight,
+  noteLines,
+  baseFontSize,
+  anchor,
+  occupied,
+  gap = 4,
+  step = 6,
+}) {
+  const lines = noteLines?.length ? noteLines : [0];
+  const maximumCapacity = Math.max(
+    1,
+    Math.floor((pageHeight - gap * 2) / baseFontSize),
+  );
+  const columnPitch = baseFontSize * 1.15;
+  const maximumColumns = Math.max(
+    1,
+    Math.floor((pageWidth - gap * 2) / columnPitch),
+  );
+  const requiredColumns = (capacity) =>
+    lines.reduce(
+      (columns, length) =>
+        columns + Math.max(1, Math.ceil(Math.max(1, length) / capacity)),
+      0,
+    );
+  const minimumColumns = requiredColumns(maximumCapacity);
+  const triedShapes = new Set();
+
+  for (
+    let targetColumns = minimumColumns;
+    targetColumns <= maximumColumns;
+    targetColumns++
+  ) {
+    let low = 1;
+    let high = maximumCapacity;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (requiredColumns(middle) <= targetColumns) high = middle;
+      else low = middle + 1;
+    }
+    const columns = requiredColumns(low);
+    if (columns > maximumColumns) continue;
+    const shapeKey = `${columns}:${low}`;
+    if (triedShapes.has(shapeKey)) continue;
+    triedShapes.add(shapeKey);
+    const position = findProofreadNotePosition({
+      pageWidth,
+      pageHeight,
+      noteWidth: columns * columnPitch,
+      noteHeight: low * baseFontSize,
+      anchor,
+      occupied,
+      gap,
+      step,
+      allowOverlapFallback: false,
+    });
+    if (position) {
+      return {
+        ...position,
+        columns,
+        charactersPerColumn: low,
+      };
+    }
+  }
+  return null;
 }
 
 export function findInlineProofreadPosition({
@@ -52,6 +121,7 @@ export function findInlineProofreadPosition({
   anchorRect,
   occupied,
   gap = 2,
+  minimumLeaderLength = baseFontSize * 0.65,
 }) {
   const anchorRight = anchorRect.x + anchorRect.width;
   const rightNeighbors = occupied.filter(
@@ -63,7 +133,8 @@ export function findInlineProofreadPosition({
   const rightBoundary = rightNeighbors.length
     ? Math.min(...rightNeighbors.map((rect) => rect.x))
     : pageWidth;
-  const availableWidth = rightBoundary - anchorRight - gap * 2;
+  const availableWidth =
+    rightBoundary - anchorRight - gap * 2 - minimumLeaderLength;
   const maximumFontSize = baseFontSize * 0.88;
   const minimumFontSize = baseFontSize * 0.72;
   const fontSize = Math.min(maximumFontSize, availableWidth);
@@ -72,11 +143,12 @@ export function findInlineProofreadPosition({
   const width = fontSize;
   const height = Math.max(fontSize, noteLength * fontSize);
   const candidate = {
-    x: anchorRight + gap + Math.max(0, (availableWidth - width) / 2),
+    x: anchorRight + gap + minimumLeaderLength,
     y: anchorRect.y,
     width,
     height,
     fontSize,
+    leaderLength: minimumLeaderLength,
   };
   if (candidate.y + candidate.height + gap > pageHeight) return null;
 
@@ -90,6 +162,27 @@ export function findInlineProofreadPosition({
   return occupied.every((rect) => !overlaps(candidate, rect))
     ? candidate
     : null;
+}
+
+export function numberLongProofreadNotes(changes, maximumCharacters = 300) {
+  let appendixNumber = 0;
+  return changes.map((change) => {
+    const note = String(change.note || "");
+    const noteLength = [...note.replaceAll("\n", "")].length;
+    if (
+      (change.type === "add" || change.type === "replace") &&
+      noteLength > maximumCharacters
+    ) {
+      appendixNumber += 1;
+      return {
+        ...change,
+        note: `※${appendixNumber}`,
+        appendixNumber,
+        appendixNote: note,
+      };
+    }
+    return change;
+  });
 }
 
 export function proofreadLeaderPoints({
@@ -112,11 +205,7 @@ export function proofreadLeaderPoints({
     anchor.x + horizontalDirection * (armLength + Math.max(0, laneOffset));
 
   if (gutterOnly) {
-    return [
-      anchor,
-      { x: armX, y: anchor.y },
-      { x: armX, y: destination.y },
-    ];
+    return [anchor, { x: armX, y: anchor.y }, { x: armX, y: destination.y }];
   }
 
   if (Math.abs(deltaY) >= Math.abs(deltaX)) {

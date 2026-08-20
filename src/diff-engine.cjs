@@ -1,5 +1,38 @@
 const { diffChars, diffWordsWithSpace } = require("diff");
 
+const wordSegmenter =
+  typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter("ja", { granularity: "word" })
+    : null;
+
+function wordBoundaries(text) {
+  const boundaries = new Set([0, text.length]);
+  if (!wordSegmenter) return boundaries;
+  for (const segment of wordSegmenter.segment(text)) {
+    boundaries.add(segment.index);
+    boundaries.add(segment.index + segment.segment.length);
+  }
+  return boundaries;
+}
+
+function preservesWordBoundary(
+  value,
+  leftStart,
+  rightStart,
+  leftBoundaries,
+  rightBoundaries,
+) {
+  if (/^[\s、。，．！？!?「」『』（）()【】〔〕〈〉《》]+$/u.test(value)) {
+    return true;
+  }
+  return (
+    leftBoundaries.has(leftStart) &&
+    leftBoundaries.has(leftStart + value.length) &&
+    rightBoundaries.has(rightStart) &&
+    rightBoundaries.has(rightStart + value.length)
+  );
+}
+
 function buildDiffParts(left, right) {
   const changes = diffWordsWithSpace(
     left.replaceAll("\r\n", "\n"),
@@ -32,27 +65,58 @@ function lineSimilarity(left, right) {
 }
 
 function lineChanges(leftLine, rightLine) {
+  if (leftLine.text === rightLine.text) return [];
   const result = [];
   let offset = leftLine.start;
+  let leftOffset = 0;
+  let rightOffset = 0;
   let current = null;
+  const parts = diffChars(leftLine.text, rightLine.text);
+  const leftBoundaries = wordBoundaries(leftLine.text);
+  const rightBoundaries = wordBoundaries(rightLine.text);
   const pushCurrent = () => {
     if (current && (current.removed || current.replacement)) {
       result.push(current);
     }
     current = null;
   };
-  for (const part of diffChars(leftLine.text, rightLine.text)) {
+  for (let index = 0; index < parts.length; index++) {
+    const part = parts[index];
     if (!part.added && !part.removed) {
-      pushCurrent();
+      const next = parts[index + 1];
+      const absorbCommonText =
+        current &&
+        next &&
+        (next.added || next.removed) &&
+        !preservesWordBoundary(
+          part.value,
+          leftOffset,
+          rightOffset,
+          leftBoundaries,
+          rightBoundaries,
+        );
+      if (absorbCommonText) {
+        current.removed += part.value;
+        current.replacement += part.value;
+        current.end += part.value.length;
+      } else {
+        pushCurrent();
+      }
       offset += part.value.length;
+      leftOffset += part.value.length;
+      rightOffset += part.value.length;
       continue;
     }
     current ||= { start: offset, end: offset, removed: "", replacement: "" };
     if (part.removed) {
       current.removed += part.value;
       offset += part.value.length;
+      leftOffset += part.value.length;
       current.end = offset;
-    } else current.replacement += part.value;
+    } else {
+      current.replacement += part.value;
+      rightOffset += part.value.length;
+    }
   }
   pushCurrent();
   return result;
@@ -176,12 +240,15 @@ function buildProofreadChanges(left, right) {
         : previousLeft >= 0
           ? leftUnits[previousLeft].end
           : 0;
-    for (const rightIndex of rightGap.slice(paired)) {
+    const addedUnits = rightGap.slice(paired);
+    if (addedUnits.length) {
+      const firstUnit = rightUnits[addedUnits[0]];
+      const lastUnit = rightUnits[addedUnits.at(-1)];
       changes.push({
         start: insertionOffset,
         end: insertionOffset,
         removed: "",
-        replacement: rightUnits[rightIndex].text,
+        replacement: normalizedRight.slice(firstUnit.start, lastUnit.end),
       });
     }
   };
