@@ -4,6 +4,7 @@ const {
   pdfDefaultPath,
   proofPdfDefaultPath,
   ensurePdfExtension,
+  normalizePdfPageSettings,
 } = require("../src/proof-pdf.cjs");
 
 test("開いているファイル名から通常PDFの保存先を作る", () => {
@@ -23,5 +24,22 @@ test("PDF拡張子がなければ追加する", () => {
   assert.equal(
     ensurePdfExtension("C:\\novel\\原稿.PDF"),
     "C:\\novel\\原稿.PDF",
+  );
+});
+
+test("通常PDFと朱入り原稿PDFのページ設定を同じ形式に揃える", () => {
+  assert.deepEqual(
+    normalizePdfPageSettings({
+      separateTitle: 1,
+      titleParity: "odd",
+      bodyParity: "even",
+      cropMarks: 0,
+    }),
+    {
+      separateTitle: true,
+      titleParity: "odd",
+      bodyParity: "even",
+      cropMarks: false,
+    },
   );
 });

@@ -16,4 +16,18 @@ function ensurePdfExtension(filePath) {
   return filePath.toLowerCase().endsWith(".pdf") ? filePath : `${filePath}.pdf`;
 }
 
-module.exports = { pdfDefaultPath, proofPdfDefaultPath, ensurePdfExtension };
+function normalizePdfPageSettings(settings = {}) {
+  return {
+    separateTitle: Boolean(settings.separateTitle),
+    titleParity: settings.titleParity,
+    bodyParity: settings.bodyParity,
+    cropMarks: Boolean(settings.cropMarks),
+  };
+}
+
+module.exports = {
+  pdfDefaultPath,
+  proofPdfDefaultPath,
+  ensurePdfExtension,
+  normalizePdfPageSettings,
+};

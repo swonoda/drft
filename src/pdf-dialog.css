@@ -1,0 +1,126 @@
+.pdf-dialog {
+  width: min(620px, calc(100vw - 48px));
+  padding: 22px;
+  border: 1px solid var(--line, #d8e0ef);
+  border-radius: 10px;
+  color: var(--ink, #26334b);
+  background: #fff;
+  box-shadow: 0 16px 48px #26334b30;
+}
+
+.pdf-dialog::backdrop {
+  background: #26334b33;
+}
+
+.pdf-dialog form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.pdf-dialog h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.pdf-dialog label {
+  display: block;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pdf-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.pdf-path-row input,
+.pdf-page-settings select,
+.pdf-dialog button {
+  min-height: 34px;
+  border: 1px solid var(--line, #d8e0ef);
+  border-radius: 6px;
+  color: var(--ink, #26334b);
+  background: #fff;
+  font: inherit;
+}
+
+.pdf-path-row input {
+  min-width: 0;
+  padding: 6px 9px;
+}
+
+.pdf-page-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line, #e2e7f1);
+  border-radius: 8px;
+}
+
+.pdf-page-settings legend {
+  padding: 0 5px;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pdf-page-settings select {
+  min-width: 0;
+  padding: 6px 28px 6px 9px;
+}
+
+.pdf-page-settings select:disabled {
+  color: #9aa5b8;
+  background: #f4f6fa;
+}
+
+.pdf-dialog .pdf-checkbox {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #405171;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.pdf-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.pdf-dialog button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.pdf-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.pdf-export-button {
+  border-color: var(--accent, #8095ca);
+  color: #fff;
+  background: var(--accent, #6177ad);
+}
+
+.pdf-export-button:hover {
+  border-color: var(--accent-dark, #6177ad);
+  color: #fff;
+  background: var(--accent-dark, #52679b);
+}
+
+.pdf-export-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}

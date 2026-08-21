@@ -6,6 +6,7 @@
     <title>DRFT — 小説執筆用エディタ</title>
     <link rel="icon" href="../build/favicon.png" />
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="pdf-dialog.css" />
   </head>
   <body>
     <header>
@@ -207,7 +208,9 @@
         </fieldset>
         <div class="pdf-dialog-actions">
           <button id="cancelPdf" type="button">キャンセル</button>
-          <button id="exportPdf" type="submit">OK</button>
+          <button class="pdf-export-button" id="exportPdf" type="submit">
+            OK
+          </button>
         </div>
       </form>
     </dialog>

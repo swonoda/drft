@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ファイル比較 — DRFT</title>
     <link rel="stylesheet" href="diff.css" />
+    <link rel="stylesheet" href="pdf-dialog.css" />
   </head>
   <body>
     <header class="toolbar">
@@ -117,17 +118,17 @@
         <path d="M12 3v11m0 0 4-4m-4 4-4-4M5 17v3h14v-3" />
       </svg>
     </button>
-    <dialog class="proof-pdf-dialog" id="proofPdfDialog">
+    <dialog class="pdf-dialog" id="proofPdfDialog">
       <form id="proofPdfForm">
         <h2>朱入り原稿PDF</h2>
         <label for="proofPdfPath">保存場所</label>
-        <div class="proof-pdf-path-row">
+        <div class="pdf-path-row">
           <input id="proofPdfPath" type="text" required />
           <button id="browseProofPdfPath" type="button">参照…</button>
         </div>
-        <fieldset class="proof-pdf-page-settings">
+        <fieldset class="pdf-page-settings">
           <legend>ページ配置</legend>
-          <label class="proof-pdf-checkbox" for="proofSeparateTitle">
+          <label class="pdf-checkbox" for="proofSeparateTitle">
             <input id="proofSeparateTitle" type="checkbox" />
             タイトルを独立ページにする
           </label>
@@ -141,14 +142,16 @@
             <option value="odd">奇数ページ（右）</option>
             <option value="even">偶数ページ（左）</option>
           </select>
-          <label class="proof-pdf-checkbox" for="proofCropMarks">
+          <label class="pdf-checkbox" for="proofCropMarks">
             <input id="proofCropMarks" type="checkbox" />
             トンボ・裁ち落としを表示
           </label>
         </fieldset>
-        <div class="proof-pdf-dialog-actions">
+        <div class="pdf-dialog-actions">
           <button id="cancelProofPdf" type="button">キャンセル</button>
-          <button id="exportProofPdf" type="submit">OK</button>
+          <button class="pdf-export-button" id="exportProofPdf" type="submit">
+            OK
+          </button>
         </div>
       </form>
     </dialog>
