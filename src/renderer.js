@@ -583,12 +583,17 @@ function savePdfSettings(settings) {
   }
 }
 
-function openPdfDialog() {
-  loadPdfSettings();
-  if (!$("pdfDialog").open) $("pdfDialog").showModal();
+async function openPdfDialog() {
+  try {
+    $("pdfPath").value = await window.desktop.pdfDefaultPath();
+    loadPdfSettings();
+    if (!$("pdfDialog").open) $("pdfDialog").showModal();
+  } catch (error) {
+    setState(`PDFを出力できません: ${error.message}`);
+  }
 }
 
-async function exportPdf(pageSettings) {
+async function exportPdf(filePath, pageSettings) {
   const printStyle = `@page{size:A5;margin:18mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}`;
   const asHtml = (content) =>
     `<!doctype html><html lang="ja"><meta charset="utf-8"><style>${printStyle}</style><body>${content}</body></html>`;
@@ -597,18 +602,39 @@ async function exportPdf(pageSettings) {
   const html = pageSettings.separateTitle
     ? [asHtml(title), asHtml(body)]
     : asHtml(title + body);
-  const p = await window.desktop.exportPdf({ html, pageSettings });
+  const p = await window.desktop.exportPdf({
+    filePath,
+    html,
+    pageSettings,
+  });
   if (p) setState(`PDF出力済み — ${p}`);
 }
 
 pdfSettingControls.separateTitle.onchange = updatePdfTitleSetting;
-$("pdfForm").addEventListener("submit", (event) => {
-  if (event.submitter?.value !== "export") return;
+$("browsePdfPath").onclick = async () => {
+  try {
+    const file = await window.desktop.choosePdfPath($("pdfPath").value);
+    if (file) $("pdfPath").value = file;
+  } catch (error) {
+    setState(`保存場所を選択できません: ${error.message}`);
+  }
+};
+$("cancelPdf").onclick = () => $("pdfDialog").close();
+$("pdfForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const submit = $("exportPdf");
+  submit.disabled = true;
+  setState("PDFを作成しています…");
   const settings = currentPdfSettings();
   savePdfSettings(settings);
-  $("pdfDialog").close();
-  exportPdf(settings);
+  try {
+    await exportPdf($("pdfPath").value, settings);
+    $("pdfDialog").close();
+  } catch (error) {
+    setState(`PDFを出力できません: ${error.message}`);
+  } finally {
+    submit.disabled = false;
+  }
 });
 $("previewDownload").onclick = openPdfDialog;
 

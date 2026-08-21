@@ -13,7 +13,11 @@ const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts, buildProofreadChanges } = require("./diff-engine.cjs");
 const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
-const { proofPdfDefaultPath, ensurePdfExtension } = require("./proof-pdf.cjs");
+const {
+  pdfDefaultPath,
+  proofPdfDefaultPath,
+  ensurePdfExtension,
+} = require("./proof-pdf.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -608,14 +612,25 @@ ipcMain.handle("file:exportPdf", async (_e, request) => {
     bodyParity: request?.pageSettings?.bodyParity,
     cropMarks: Boolean(request?.pageSettings?.cropMarks),
   };
-  const r = await dialog.showSaveDialog(win, {
-    defaultPath: "原稿.pdf",
-    filters: [{ name: "PDF", extensions: ["pdf"] }],
-  });
-  if (r.canceled) return null;
-  const file = ensurePdfExtension(r.filePath);
+  if (typeof request?.filePath !== "string" || !request.filePath.trim()) {
+    throw new Error("PDFの保存場所を指定してください");
+  }
+  const file = ensurePdfExtension(request.filePath.trim());
   await fs.writeFile(file, await renderSpreadPdf(htmlDocuments, pageSettings));
   return file;
+});
+
+ipcMain.handle("file:pdfDefaultPath", () => pdfDefaultPath(currentPath));
+
+ipcMain.handle("file:choosePdfPath", async (_event, defaultPath) => {
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath:
+      typeof defaultPath === "string" && defaultPath
+        ? defaultPath
+        : pdfDefaultPath(currentPath),
+    filters: [{ name: "PDF", extensions: ["pdf"] }],
+  });
+  return result.canceled ? null : ensurePdfExtension(result.filePath);
 });
 
 ipcMain.handle("file:exportEpub", async (_event, book) => {
