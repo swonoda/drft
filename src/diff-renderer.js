@@ -14,6 +14,7 @@ import {
   fixedSpreadPreviewLayout,
   previewPageCount,
 } from "./preview-layout.js";
+import { createPdfExportSettingsController } from "./pdf-export-settings.js";
 
 const $ = (id) => document.getElementById(id);
 const leftDocument = $("leftDocument");
@@ -24,6 +25,20 @@ const layoutSidebar = $("layoutSidebar");
 const layoutSidebarToggle = $("layoutSidebarToggle");
 const proofPdfButton = $("proofPdfButton");
 const proofPdfDialog = $("proofPdfDialog");
+const proofPdfSettings = createPdfExportSettingsController({
+  controls: {
+    separateTitle: $("proofSeparateTitle"),
+    titleParity: $("proofTitleParity"),
+    bodyParity: $("proofBodyParity"),
+    cropMarks: $("proofCropMarks"),
+  },
+  keys: {
+    separateTitle: "diffPreview.proofSeparateTitle",
+    titleParity: "diffPreview.proofTitleParity",
+    bodyParity: "diffPreview.proofBodyParity",
+    cropMarks: "diffPreview.proofCropMarks",
+  },
+});
 let viewMode = "diff";
 let changeIds = [];
 let currentChangeIndex = -1;
@@ -721,55 +736,6 @@ function stylesheetText() {
     .join("\n");
 }
 
-function proofPdfSettings() {
-  return {
-    separateTitle:
-      localStorage.getItem("diffPreview.proofSeparateTitle") === "true",
-    titleParity:
-      localStorage.getItem("diffPreview.proofTitleParity") === "even"
-        ? "even"
-        : "odd",
-    bodyParity:
-      localStorage.getItem("diffPreview.proofBodyParity") === "odd"
-        ? "odd"
-        : "even",
-    cropMarks: localStorage.getItem("diffPreview.proofCropMarks") === "true",
-  };
-}
-
-function syncProofTitleControls() {
-  $("proofTitleParity").disabled = !$("proofSeparateTitle").checked;
-}
-
-function fillProofPdfSettings() {
-  const settings = proofPdfSettings();
-  $("proofSeparateTitle").checked = settings.separateTitle;
-  $("proofTitleParity").value = settings.titleParity;
-  $("proofBodyParity").value = settings.bodyParity;
-  $("proofCropMarks").checked = settings.cropMarks;
-  syncProofTitleControls();
-}
-
-function saveProofPdfSettings() {
-  const settings = {
-    separateTitle: $("proofSeparateTitle").checked,
-    titleParity: $("proofTitleParity").value,
-    bodyParity: $("proofBodyParity").value,
-    cropMarks: $("proofCropMarks").checked,
-  };
-  localStorage.setItem(
-    "diffPreview.proofSeparateTitle",
-    String(settings.separateTitle),
-  );
-  localStorage.setItem("diffPreview.proofTitleParity", settings.titleParity);
-  localStorage.setItem("diffPreview.proofBodyParity", settings.bodyParity);
-  localStorage.setItem(
-    "diffPreview.proofCropMarks",
-    String(settings.cropMarks),
-  );
-  return settings;
-}
-
 function buildProofPdfHtml(settings) {
   const displayedPage = oldPreview.querySelector(".preview-page:last-child");
   if (!proofPdfPreview || !displayedPage) {
@@ -908,7 +874,7 @@ function buildProofPdfHtml(settings) {
 async function openProofPdfDialog() {
   try {
     $("proofPdfPath").value = await window.diffApi.proofPdfDefaultPath();
-    fillProofPdfSettings();
+    proofPdfSettings.load();
     proofPdfDialog.showModal();
   } catch (error) {
     $("status").textContent = `PDFを出力できません: ${error.message}`;
@@ -916,7 +882,6 @@ async function openProofPdfDialog() {
 }
 
 proofPdfButton.onclick = openProofPdfDialog;
-$("proofSeparateTitle").addEventListener("change", syncProofTitleControls);
 $("browseProofPdfPath").onclick = async () => {
   const file = await window.diffApi.chooseProofPdfPath($("proofPdfPath").value);
   if (file) $("proofPdfPath").value = file;
@@ -928,7 +893,7 @@ $("proofPdfForm").addEventListener("submit", async (event) => {
   submit.disabled = true;
   $("status").textContent = "朱入り原稿PDFを作成しています…";
   try {
-    const proofPdf = buildProofPdfHtml(saveProofPdfSettings());
+    const proofPdf = buildProofPdfHtml(proofPdfSettings.save());
     const file = await window.diffApi.exportProofPdf({
       filePath: $("proofPdfPath").value,
       ...proofPdf,
