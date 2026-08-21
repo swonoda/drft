@@ -1,9 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  pdfDefaultPath,
   proofPdfDefaultPath,
   ensurePdfExtension,
 } = require("../src/proof-pdf.cjs");
+
+test("開いているファイル名から通常PDFの保存先を作る", () => {
+  assert.equal(pdfDefaultPath("原稿.txt"), "原稿.pdf");
+  assert.equal(pdfDefaultPath(null), "原稿.pdf");
+});
 
 test("古いファイル名から朱入り原稿PDFの保存先を作る", () => {
   assert.equal(

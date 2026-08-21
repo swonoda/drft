@@ -8,7 +8,6 @@
   --ls: 0em;
   --line-chars: 40;
   --preview-line-pitch: 31.5px;
-  --preview-body-width: 504px;
   --preview-page-width: 568px;
   --preview-pane-width: 624px;
   --ink: #29394c;
@@ -333,9 +332,36 @@ aside {
   border-radius: 50%;
   font-size: 20px;
 }
-.preview-fix-toggle {
+.preview-actions {
   grid-column: 3;
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-download {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.preview-download:hover {
+  background: var(--paper);
+  color: var(--accent-dark);
+}
+.preview-download svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+.preview-fix-toggle {
   display: inline-flex;
   align-items: center;
   width: auto;
@@ -397,27 +423,19 @@ article {
   width: min(var(--preview-page-width), 100%);
   height: calc(var(--line-chars) * (var(--size) + var(--ls)) + 64px);
   max-height: 100%;
-  padding: 0;
+  padding: 32px;
   background: var(--paper);
   border: 0;
   overflow: hidden;
   box-shadow: none;
 }
-.preview-body {
+.preview-content {
   position: absolute;
   top: 32px;
   right: 32px;
-  width: var(--preview-body-width);
-  height: calc(100% - 64px);
-  overflow: hidden;
-}
-.preview-content {
-  position: absolute;
-  top: 0;
-  right: 0;
   width: max-content;
-  min-width: var(--preview-body-width);
-  height: 100%;
+  min-width: calc(100% - 64px);
+  height: calc(100% - 64px);
   font-family: var(--font);
   font-size: var(--size);
   line-height: var(--lh);
@@ -513,6 +531,103 @@ dialog select {
   border: 1px solid var(--line);
   border-radius: 4px;
   background: white;
+}
+.pdf-dialog {
+  width: min(620px, calc(100vw - 48px));
+  padding: 22px;
+}
+.pdf-dialog form {
+  gap: 12px;
+  min-width: 0;
+}
+.pdf-dialog h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+.pdf-dialog label {
+  display: block;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pdf-path-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+.pdf-path-row input,
+.pdf-page-settings select,
+.pdf-dialog button {
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+}
+.pdf-path-row input {
+  min-width: 0;
+  padding: 6px 9px;
+}
+.pdf-page-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, auto);
+  align-items: center;
+  gap: 10px 16px;
+  margin: 4px 0 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.pdf-page-settings legend {
+  padding: 0 5px;
+  color: #566681;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pdf-page-settings select {
+  min-width: 0;
+  padding: 6px 28px 6px 9px;
+}
+.pdf-page-settings select:disabled {
+  color: #9aa5b8;
+  background: #f4f6fa;
+}
+.pdf-dialog .pdf-checkbox {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #405171;
+  font-size: 13px;
+  font-weight: 500;
+}
+.pdf-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.pdf-dialog button {
+  padding: 6px 12px;
+}
+.pdf-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+#exportPdf {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+#exportPdf:hover {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
+}
+#exportPdf:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 dialog::backdrop {
   background: #4d5f8a24;

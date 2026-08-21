@@ -541,11 +541,102 @@ for (const [id, key, suffix] of displaySettings) {
 }
 applyPreviewPageSize();
 updateEditorHorizontalMargin();
-async function exportPdf() {
-  const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><style>@page{size:A5;margin:18mm;marks:crop cross;bleed:3mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}</style><h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>${renderBody(editor.value)}</html>`;
-  const p = await window.desktop.exportPdf(html);
+const pdfSettingControls = {
+  separateTitle: $("pdfSeparateTitle"),
+  titleParity: $("pdfTitleParity"),
+  bodyParity: $("pdfBodyParity"),
+  cropMarks: $("pdfCropMarks"),
+};
+
+function storedPdfParity(key, fallback) {
+  const value = localStorage.getItem(`pdf.${key}`);
+  return value === "odd" || value === "even" ? value : fallback;
+}
+
+function loadPdfSettings() {
+  pdfSettingControls.separateTitle.checked =
+    localStorage.getItem("pdf.separateTitle") === "true";
+  pdfSettingControls.titleParity.value = storedPdfParity("titleParity", "odd");
+  pdfSettingControls.bodyParity.value = storedPdfParity("bodyParity", "even");
+  pdfSettingControls.cropMarks.checked =
+    localStorage.getItem("pdf.cropMarks") === "true";
+  updatePdfTitleSetting();
+}
+
+function updatePdfTitleSetting() {
+  pdfSettingControls.titleParity.disabled =
+    !pdfSettingControls.separateTitle.checked;
+}
+
+function currentPdfSettings() {
+  return {
+    separateTitle: pdfSettingControls.separateTitle.checked,
+    titleParity: pdfSettingControls.titleParity.value,
+    bodyParity: pdfSettingControls.bodyParity.value,
+    cropMarks: pdfSettingControls.cropMarks.checked,
+  };
+}
+
+function savePdfSettings(settings) {
+  for (const [key, value] of Object.entries(settings)) {
+    localStorage.setItem(`pdf.${key}`, String(value));
+  }
+}
+
+async function openPdfDialog() {
+  try {
+    $("pdfPath").value = await window.desktop.pdfDefaultPath();
+    loadPdfSettings();
+    if (!$("pdfDialog").open) $("pdfDialog").showModal();
+  } catch (error) {
+    setState(`PDFを出力できません: ${error.message}`);
+  }
+}
+
+async function exportPdf(filePath, pageSettings) {
+  const printStyle = `@page{size:A5;margin:18mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}`;
+  const asHtml = (content) =>
+    `<!doctype html><html lang="ja"><meta charset="utf-8"><style>${printStyle}</style><body>${content}</body></html>`;
+  const title = `<h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>`;
+  const body = renderBody(editor.value);
+  const html = pageSettings.separateTitle
+    ? [asHtml(title), asHtml(body)]
+    : asHtml(title + body);
+  const p = await window.desktop.exportPdf({
+    filePath,
+    html,
+    pageSettings,
+  });
   if (p) setState(`PDF出力済み — ${p}`);
 }
+
+pdfSettingControls.separateTitle.onchange = updatePdfTitleSetting;
+$("browsePdfPath").onclick = async () => {
+  try {
+    const file = await window.desktop.choosePdfPath($("pdfPath").value);
+    if (file) $("pdfPath").value = file;
+  } catch (error) {
+    setState(`保存場所を選択できません: ${error.message}`);
+  }
+};
+$("cancelPdf").onclick = () => $("pdfDialog").close();
+$("pdfForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const submit = $("exportPdf");
+  submit.disabled = true;
+  setState("PDFを作成しています…");
+  const settings = currentPdfSettings();
+  savePdfSettings(settings);
+  try {
+    await exportPdf($("pdfPath").value, settings);
+    $("pdfDialog").close();
+  } catch (error) {
+    setState(`PDFを出力できません: ${error.message}`);
+  } finally {
+    submit.disabled = false;
+  }
+});
+$("previewDownload").onclick = openPdfDialog;
 
 async function exportEpub() {
   const book = buildEpubBook(editor.value);
@@ -572,7 +663,7 @@ window.desktop.onMenuCommand((command) => {
     save: saveDocument,
     "save-as": saveDocumentAs,
     snapshot: saveSnapshot,
-    pdf: exportPdf,
+    pdf: openPdfDialog,
     epub: exportEpub,
     compare: openDiff,
     find: () => openFindDialog(false),

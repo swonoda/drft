@@ -8,7 +8,10 @@ contextBridge.exposeInMainWorld("desktop", {
   saveAs: (text, encoding) => ipcRenderer.invoke("file:saveAs", text, encoding),
   saveSnapshot: (text, encoding) =>
     ipcRenderer.invoke("file:snapshot", text, encoding),
-  exportPdf: (html) => ipcRenderer.invoke("file:exportPdf", html),
+  pdfDefaultPath: () => ipcRenderer.invoke("file:pdfDefaultPath"),
+  choosePdfPath: (defaultPath) =>
+    ipcRenderer.invoke("file:choosePdfPath", defaultPath),
+  exportPdf: (request) => ipcRenderer.invoke("file:exportPdf", request),
   exportEpub: (book) => ipcRenderer.invoke("file:exportEpub", book),
   openDictionary: () => ipcRenderer.invoke("dictionary:open"),
   openDiff: (document) => ipcRenderer.invoke("file:openDiff", document),

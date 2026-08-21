@@ -2,9 +2,10 @@ const { app, BrowserWindow, dialog, ipcMain, Menu } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const {
+  applyPdfPagePlan,
+  combinePdfDocuments,
   combinePlannedPages,
   imposeRightBoundLogicalPages,
-  imposeRightBoundSpreads,
   proofPdfPagePlan,
 } = require("./pdf-spread.cjs");
 const { createEpubArchive } = require("./epub-archive.cjs");
@@ -12,7 +13,11 @@ const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { buildDiffParts, buildProofreadChanges } = require("./diff-engine.cjs");
 const { analyzePdfLayout } = require("./pdf-layout.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
-const { proofPdfDefaultPath, ensurePdfExtension } = require("./proof-pdf.cjs");
+const {
+  pdfDefaultPath,
+  proofPdfDefaultPath,
+  ensurePdfExtension,
+} = require("./proof-pdf.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -467,20 +472,33 @@ ipcMain.handle("file:snapshot", async (_e, text, encoding) => {
   return file;
 });
 
-async function renderSpreadPdf(html) {
+async function renderSpreadPdf(htmlDocuments, pageSettings) {
   const pdfWin = new BrowserWindow({
     show: false,
     webPreferences: { sandbox: true },
   });
   try {
-    await pdfWin.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
-    );
-    const data = await pdfWin.webContents.printToPDF({
-      printBackground: true,
-      preferCSSPageSize: true,
+    const documents = [];
+    for (const html of htmlDocuments) {
+      await pdfWin.loadURL(
+        `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+      );
+      await pdfWin.webContents.executeJavaScript("document.fonts.ready");
+      documents.push(
+        await pdfWin.webContents.printToPDF({
+          printBackground: true,
+          preferCSSPageSize: true,
+        }),
+      );
+    }
+    const data =
+      documents.length === 1
+        ? documents[0]
+        : await combinePdfDocuments(documents);
+    const logicalPages = await applyPdfPagePlan(data, pageSettings);
+    return imposeRightBoundLogicalPages(logicalPages, {
+      cropMarks: Boolean(pageSettings.cropMarks),
     });
-    return imposeRightBoundSpreads(data);
   } finally {
     pdfWin.destroy();
   }
@@ -578,14 +596,41 @@ async function renderProofSpreadPdf(
   }
 }
 
-ipcMain.handle("file:exportPdf", async (_e, html) => {
-  const r = await dialog.showSaveDialog(win, {
-    defaultPath: "原稿.pdf",
+ipcMain.handle("file:exportPdf", async (_e, request) => {
+  const htmlDocuments = Array.isArray(request?.html)
+    ? request.html
+    : [typeof request === "string" ? request : request?.html];
+  if (
+    !htmlDocuments.length ||
+    htmlDocuments.some((html) => typeof html !== "string" || !html)
+  ) {
+    throw new Error("PDFの原稿を作成できません");
+  }
+  const pageSettings = {
+    separateTitle: Boolean(request?.pageSettings?.separateTitle),
+    titleParity: request?.pageSettings?.titleParity,
+    bodyParity: request?.pageSettings?.bodyParity,
+    cropMarks: Boolean(request?.pageSettings?.cropMarks),
+  };
+  if (typeof request?.filePath !== "string" || !request.filePath.trim()) {
+    throw new Error("PDFの保存場所を指定してください");
+  }
+  const file = ensurePdfExtension(request.filePath.trim());
+  await fs.writeFile(file, await renderSpreadPdf(htmlDocuments, pageSettings));
+  return file;
+});
+
+ipcMain.handle("file:pdfDefaultPath", () => pdfDefaultPath(currentPath));
+
+ipcMain.handle("file:choosePdfPath", async (_event, defaultPath) => {
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath:
+      typeof defaultPath === "string" && defaultPath
+        ? defaultPath
+        : pdfDefaultPath(currentPath),
     filters: [{ name: "PDF", extensions: ["pdf"] }],
   });
-  if (r.canceled) return null;
-  await fs.writeFile(r.filePath, await renderSpreadPdf(html));
-  return r.filePath;
+  return result.canceled ? null : ensurePdfExtension(result.filePath);
 });
 
 ipcMain.handle("file:exportEpub", async (_event, book) => {
