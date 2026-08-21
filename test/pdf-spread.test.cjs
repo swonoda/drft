@@ -2,11 +2,13 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { PDFDocument, rgb } = require("pdf-lib");
 const {
+  applyPdfPagePlan,
   combineFirstPages,
+  combinePdfDocuments,
   combinePlannedPages,
   imposeRightBoundLogicalPages,
   imposeRightBoundSpreads,
-  proofPdfPagePlan,
+  pdfPagePlan,
 } = require("../src/pdf-spread.cjs");
 
 test("個別に印刷したPDFの先頭ページを順番どおりにまとめる", async () => {
@@ -22,17 +24,33 @@ test("個別に印刷したPDFの先頭ページを順番どおりにまとめ�
   assert.deepEqual(result.getPage(2).getSize(), { width: 422, height: 595 });
 });
 
+test("タイトルと本文を別々に印刷したPDFを順番どおりにまとめる", async () => {
+  const title = await PDFDocument.create();
+  title.addPage([420, 595]);
+  const body = await PDFDocument.create();
+  body.addPage([420, 595]);
+  body.addPage([420, 595]);
+
+  const result = await PDFDocument.load(
+    await combinePdfDocuments([await title.save(), await body.save()]),
+  );
+
+  assert.equal(result.getPageCount(), 3);
+});
+
 test("タイトルと本文の奇数偶数指定から論理ページを組み立てる", () => {
   assert.deepEqual(
-    proofPdfPagePlan({ contentPageCount: 3, bodyParity: "odd" }),
+    pdfPagePlan({ contentPageCount: 3, bodyParity: "odd" }),
     [0, 1, 2],
   );
+  assert.deepEqual(pdfPagePlan({ contentPageCount: 3, bodyParity: "even" }), [
+    null,
+    0,
+    1,
+    2,
+  ]);
   assert.deepEqual(
-    proofPdfPagePlan({ contentPageCount: 3, bodyParity: "even" }),
-    [null, 0, 1, 2],
-  );
-  assert.deepEqual(
-    proofPdfPagePlan({
+    pdfPagePlan({
       contentPageCount: 3,
       separateTitle: true,
       titleParity: "odd",
@@ -41,7 +59,7 @@ test("タイトルと本文の奇数偶数指定から論理ページを組み�
     [0, null, 1, 2],
   );
   assert.deepEqual(
-    proofPdfPagePlan({
+    pdfPagePlan({
       contentPageCount: 3,
       separateTitle: true,
       titleParity: "odd",
@@ -50,7 +68,7 @@ test("タイトルと本文の奇数偶数指定から論理ページを組み�
     [0, 1, 2],
   );
   assert.deepEqual(
-    proofPdfPagePlan({
+    pdfPagePlan({
       contentPageCount: 3,
       separateTitle: true,
       titleParity: "even",
@@ -59,7 +77,7 @@ test("タイトルと本文の奇数偶数指定から論理ページを組み�
     [null, 0, 1, 2],
   );
   assert.deepEqual(
-    proofPdfPagePlan({
+    pdfPagePlan({
       contentPageCount: 3,
       separateTitle: true,
       titleParity: "even",
@@ -67,6 +85,23 @@ test("タイトルと本文の奇数偶数指定から論理ページを組み�
     }),
     [null, 0, null, 1, 2],
   );
+});
+
+test("通常PDFにもページ計画を適用する", async () => {
+  const source = await PDFDocument.create();
+  source.addPage([420, 595]);
+  source.addPage([420, 595]);
+
+  const logical = await PDFDocument.load(
+    await applyPdfPagePlan(await source.save(), {
+      separateTitle: true,
+      titleParity: "odd",
+      bodyParity: "odd",
+    }),
+  );
+
+  assert.equal(logical.getPageCount(), 3);
+  assert.deepEqual(logical.getPage(1).getSize(), { width: 420, height: 595 });
 });
 
 test("ページ計画の空白を含めて単ページPDFを作る", async () => {

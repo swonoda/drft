@@ -541,11 +541,76 @@ for (const [id, key, suffix] of displaySettings) {
 }
 applyPreviewPageSize();
 updateEditorHorizontalMargin();
-async function exportPdf() {
-  const html = `<!doctype html><html lang="ja"><meta charset="utf-8"><style>@page{size:A5;margin:18mm;marks:crop cross;bleed:3mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}</style><h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>${renderBody(editor.value)}</html>`;
-  const p = await window.desktop.exportPdf(html);
+const pdfSettingControls = {
+  separateTitle: $("pdfSeparateTitle"),
+  titleParity: $("pdfTitleParity"),
+  bodyParity: $("pdfBodyParity"),
+  cropMarks: $("pdfCropMarks"),
+};
+
+function storedPdfParity(key, fallback) {
+  const value = localStorage.getItem(`pdf.${key}`);
+  return value === "odd" || value === "even" ? value : fallback;
+}
+
+function loadPdfSettings() {
+  pdfSettingControls.separateTitle.checked =
+    localStorage.getItem("pdf.separateTitle") === "true";
+  pdfSettingControls.titleParity.value = storedPdfParity("titleParity", "odd");
+  pdfSettingControls.bodyParity.value = storedPdfParity("bodyParity", "even");
+  pdfSettingControls.cropMarks.checked =
+    localStorage.getItem("pdf.cropMarks") === "true";
+  updatePdfTitleSetting();
+}
+
+function updatePdfTitleSetting() {
+  pdfSettingControls.titleParity.disabled =
+    !pdfSettingControls.separateTitle.checked;
+}
+
+function currentPdfSettings() {
+  return {
+    separateTitle: pdfSettingControls.separateTitle.checked,
+    titleParity: pdfSettingControls.titleParity.value,
+    bodyParity: pdfSettingControls.bodyParity.value,
+    cropMarks: pdfSettingControls.cropMarks.checked,
+  };
+}
+
+function savePdfSettings(settings) {
+  for (const [key, value] of Object.entries(settings)) {
+    localStorage.setItem(`pdf.${key}`, String(value));
+  }
+}
+
+function openPdfDialog() {
+  loadPdfSettings();
+  if (!$("pdfDialog").open) $("pdfDialog").showModal();
+}
+
+async function exportPdf(pageSettings) {
+  const printStyle = `@page{size:A5;margin:18mm}body{height:calc(${$("lineChars").value} * (1em + ${$("letterSpacing").value}em));font-family:${$("font").value};writing-mode:vertical-rl;text-orientation:upright;font-feature-settings:"vert" 1,"vrt2" 1;line-height:${$("lineHeight").value};letter-spacing:${$("letterSpacing").value}em;font-size:${$("fontSize").value}px;column-count:1;column-fill:auto;column-gap:3em;column-rule:0}h2{break-before:auto;break-after:avoid;break-inside:avoid}p{white-space:pre-wrap;margin:0 0 0 1em}.bout{text-emphasis:filled sesame}rt{font-size:.5em}`;
+  const asHtml = (content) =>
+    `<!doctype html><html lang="ja"><meta charset="utf-8"><style>${printStyle}</style><body>${content}</body></html>`;
+  const title = `<h1>${inlineMarkup(parseDocument(editor.value).title)}</h1>`;
+  const body = renderBody(editor.value);
+  const html = pageSettings.separateTitle
+    ? [asHtml(title), asHtml(body)]
+    : asHtml(title + body);
+  const p = await window.desktop.exportPdf({ html, pageSettings });
   if (p) setState(`PDF出力済み — ${p}`);
 }
+
+pdfSettingControls.separateTitle.onchange = updatePdfTitleSetting;
+$("pdfForm").addEventListener("submit", (event) => {
+  if (event.submitter?.value !== "export") return;
+  event.preventDefault();
+  const settings = currentPdfSettings();
+  savePdfSettings(settings);
+  $("pdfDialog").close();
+  exportPdf(settings);
+});
+$("previewDownload").onclick = openPdfDialog;
 
 async function exportEpub() {
   const book = buildEpubBook(editor.value);
@@ -572,7 +637,7 @@ window.desktop.onMenuCommand((command) => {
     save: saveDocument,
     "save-as": saveDocumentAs,
     snapshot: saveSnapshot,
-    pdf: exportPdf,
+    pdf: openPdfDialog,
     epub: exportEpub,
     compare: openDiff,
     find: () => openFindDialog(false),

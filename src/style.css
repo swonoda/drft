@@ -8,7 +8,6 @@
   --ls: 0em;
   --line-chars: 40;
   --preview-line-pitch: 31.5px;
-  --preview-body-width: 504px;
   --preview-page-width: 568px;
   --preview-pane-width: 624px;
   --ink: #29394c;
@@ -333,9 +332,36 @@ aside {
   border-radius: 50%;
   font-size: 20px;
 }
-.preview-fix-toggle {
+.preview-actions {
   grid-column: 3;
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.preview-download {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--muted);
+}
+.preview-download:hover {
+  background: var(--paper);
+  color: var(--accent-dark);
+}
+.preview-download svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+.preview-fix-toggle {
   display: inline-flex;
   align-items: center;
   width: auto;
@@ -397,27 +423,19 @@ article {
   width: min(var(--preview-page-width), 100%);
   height: calc(var(--line-chars) * (var(--size) + var(--ls)) + 64px);
   max-height: 100%;
-  padding: 0;
+  padding: 32px;
   background: var(--paper);
   border: 0;
   overflow: hidden;
   box-shadow: none;
 }
-.preview-body {
+.preview-content {
   position: absolute;
   top: 32px;
   right: 32px;
-  width: var(--preview-body-width);
-  height: calc(100% - 64px);
-  overflow: hidden;
-}
-.preview-content {
-  position: absolute;
-  top: 0;
-  right: 0;
   width: max-content;
-  min-width: var(--preview-body-width);
-  height: 100%;
+  min-width: calc(100% - 64px);
+  height: calc(100% - 64px);
   font-family: var(--font);
   font-size: var(--size);
   line-height: var(--lh);
@@ -507,12 +525,36 @@ dialog label {
   align-items: center;
   gap: 8px;
 }
+dialog label.dialog-check {
+  grid-template-columns: auto 1fr;
+  justify-content: start;
+}
+dialog label.dialog-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
 dialog input,
 dialog select {
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: 4px;
   background: white;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.dialog-actions .primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: white;
+}
+.dialog-actions .primary:hover {
+  border-color: var(--accent-dark);
+  background: var(--accent-dark);
 }
 dialog::backdrop {
   background: #4d5f8a24;

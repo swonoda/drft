@@ -46,15 +46,28 @@
             ><span id="pageState">1 / 1</span
             ><button id="pageBack" aria-label="前のページ">›</button>
           </div>
-          <button
-            id="fixPreviewToggle"
-            class="preview-fix-toggle active"
-            type="button"
-            aria-pressed="true"
-          >
-            <span class="preview-fix-toggle-dot" aria-hidden="true"></span>
-            修正表示
-          </button>
+          <div class="preview-actions">
+            <button
+              id="previewDownload"
+              class="preview-download"
+              type="button"
+              title="PDF出力"
+              aria-label="PDF出力"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v10m0 0 4-4m-4 4-4-4M5 18.5h14" />
+              </svg>
+            </button>
+            <button
+              id="fixPreviewToggle"
+              class="preview-fix-toggle active"
+              type="button"
+              aria-pressed="true"
+            >
+              <span class="preview-fix-toggle-dot" aria-hidden="true"></span>
+              修正表示
+            </button>
+          </div>
         </div>
         <div class="page-stage">
           <article id="preview">
@@ -161,6 +174,37 @@
           />
           px</label
         ><button>閉じる</button>
+      </form>
+    </dialog>
+    <dialog id="pdfDialog">
+      <form id="pdfForm" method="dialog">
+        <h3>PDF出力</h3>
+        <label class="dialog-check">
+          <input id="pdfSeparateTitle" type="checkbox" />
+          タイトルを独立ページにする
+        </label>
+        <label>
+          タイトルの開始
+          <select id="pdfTitleParity">
+            <option value="odd">奇数ページ</option>
+            <option value="even">偶数ページ</option>
+          </select>
+        </label>
+        <label>
+          本文の開始
+          <select id="pdfBodyParity">
+            <option value="even">偶数ページ</option>
+            <option value="odd">奇数ページ</option>
+          </select>
+        </label>
+        <label class="dialog-check">
+          <input id="pdfCropMarks" type="checkbox" />
+          トンボ・裁ち落としを表示
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel">キャンセル</button>
+          <button value="export" class="primary">出力</button>
+        </div>
       </form>
     </dialog>
     <script type="module" src="renderer.js"></script>

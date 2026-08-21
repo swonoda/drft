@@ -63,7 +63,7 @@ function normalizeParity(value, fallback) {
   return value === "odd" || value === "even" ? value : fallback;
 }
 
-function proofPdfPagePlan({
+function pdfPagePlan({
   contentPageCount,
   separateTitle = false,
   titleParity = "odd",
@@ -93,6 +93,36 @@ function proofPdfPagePlan({
   return plan;
 }
 
+const proofPdfPagePlan = pdfPagePlan;
+
+async function applyPdfPagePlan(sourceBytes, pageSettings = {}) {
+  const source = await PDFDocument.load(sourceBytes);
+  if (!source.getPageCount()) return (await PDFDocument.create()).save();
+  const { width, height } = source.getPage(0).getSize();
+  const output = await PDFDocument.create();
+  const pagePlan = pdfPagePlan({
+    contentPageCount: source.getPageCount(),
+    ...pageSettings,
+  });
+
+  for (const sourceIndex of pagePlan) {
+    if (sourceIndex === null) {
+      const blank = output.addPage([width, height]);
+      blank.drawRectangle({
+        x: 0,
+        y: 0,
+        width,
+        height,
+        color: rgb(1, 1, 1),
+      });
+      continue;
+    }
+    const [page] = await output.copyPages(source, [sourceIndex]);
+    output.addPage(page);
+  }
+  return output.save();
+}
+
 async function combineFirstPages(pdfDocuments) {
   const output = await PDFDocument.create();
   for (const bytes of pdfDocuments) {
@@ -100,6 +130,17 @@ async function combineFirstPages(pdfDocuments) {
     if (!source.getPageCount()) continue;
     const [page] = await output.copyPages(source, [0]);
     output.addPage(page);
+  }
+  return output.save();
+}
+
+async function combinePdfDocuments(pdfDocuments) {
+  const output = await PDFDocument.create();
+  for (const bytes of pdfDocuments) {
+    const source = await PDFDocument.load(bytes);
+    const pageIndexes = source.getPages().map((_page, index) => index);
+    const pages = await output.copyPages(source, pageIndexes);
+    for (const page of pages) output.addPage(page);
   }
   return output.save();
 }
@@ -214,9 +255,12 @@ async function imposeRightBoundSpreads(sourceBytes) {
 }
 
 module.exports = {
+  applyPdfPagePlan,
   combineFirstPages,
+  combinePdfDocuments,
   combinePlannedPages,
   imposeRightBoundLogicalPages,
   imposeRightBoundSpreads,
+  pdfPagePlan,
   proofPdfPagePlan,
 };
