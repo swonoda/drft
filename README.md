@@ -27,9 +27,7 @@ npm install
 npm start
 ```
 
-ソースコードからの起動はmacOSでも可能です。配布パッケージは現在Windows版のみ用意しています。macOSで使用する場合は、package.jsonから下記を削除してください。
-- node-poppler
-- node-poppler-win32
+ソースコードからの起動はmacOSでも可能です。配布パッケージは現在Windows版のみ用意しています。
 
 ### Windows配布版をビルドする
 
