@@ -4,6 +4,7 @@ const path = require("node:path");
 const { pdfPageCount, renderPdfPagePng } = require("./pdf-layout.cjs");
 const { buildProofDraft } = require("./proof-apply-engine.cjs");
 const { recognizeProofChanges } = require("./proof-recognition.cjs");
+const { createPngPayload } = require("./proof-image-transfer.cjs");
 const { proofReviewSnapshotPath } = require("./snapshot.cjs");
 const { encodeText } = require("./text-encoding.cjs");
 
@@ -89,7 +90,7 @@ function registerProofApplyIpc({
     proofWindow.proofPdfPageCache ||= new Map();
     if (!proofWindow.proofPdfPageCache.has(page)) {
       const rendered = renderPdfPagePng(proofState.pdfPath, page)
-        .then((png) => `data:image/png;base64,${png.toString("base64")}`)
+        .then(createPngPayload)
         .catch((error) => {
           proofWindow.proofPdfPageCache.delete(page);
           throw error;

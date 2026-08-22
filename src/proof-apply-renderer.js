@@ -13,6 +13,7 @@ let pdfPage = 1;
 let pdfPageCount = 1;
 let pdfZoom = 1;
 let pdfLoadToken = 0;
+let pdfObjectUrl = null;
 
 function showNotice(message) {
   $("noticeText").textContent = message;
@@ -248,20 +249,44 @@ async function showPdfPage(pageNumber) {
   $("proofPdfCanvas").hidden = true;
   updatePdfToolbar();
   try {
-    const dataUrl = await window.proofApplyApi.pdfPage(pdfPage);
+    const payload = await window.proofApplyApi.pdfPage(pdfPage);
     if (token !== pdfLoadToken) return;
+    if (!payload?.base64 || !Number.isInteger(payload.byteLength)) {
+      throw new Error("PDF画像のデータを受け取れませんでした。");
+    }
+    const binary = atob(payload.base64);
+    if (binary.length !== payload.byteLength) {
+      throw new Error("PDF画像のデータが途中で欠けています。");
+    }
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    const objectUrl = URL.createObjectURL(
+      new Blob([bytes], { type: payload.mimeType || "image/png" }),
+    );
     await new Promise((resolve, reject) => {
       image.onload = resolve;
-      image.onerror = () => reject(new Error("PDF画像を表示できません。"));
-      image.src = dataUrl;
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("PDF画像を表示できません。"));
+      };
+      image.src = objectUrl;
     });
-    if (token !== pdfLoadToken) return;
+    if (token !== pdfLoadToken) {
+      URL.revokeObjectURL(objectUrl);
+      return;
+    }
+    if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
+    pdfObjectUrl = objectUrl;
     $("proofPdfCanvas").hidden = false;
     message.hidden = true;
     renderNoteOverlay();
     $("proofPdfViewport").scrollTo({ top: 0, left: 0 });
   } catch (error) {
     if (token !== pdfLoadToken) return;
+    image.removeAttribute("src");
+    $("proofPdfCanvas").hidden = true;
     message.textContent = `PDFを表示できません: ${error.message}`;
     message.hidden = false;
   }

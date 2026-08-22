@@ -439,7 +439,8 @@ button:disabled {
 }
 
 .proof-pdf-message[hidden],
-#proofPdfPage[hidden] {
+#proofPdfPage[hidden],
+.proof-pdf-canvas[hidden] {
   display: none;
 }
 
