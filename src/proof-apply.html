@@ -77,7 +77,7 @@
         <div class="proof-pdf-head">
           <div class="proof-pdf-title">
             <strong id="pdfName">赤ゲラPDF</strong>
-            <span>赤字を見ながら左側を修正できます</span>
+            <span id="pdfStatus">表示準備中（Canvas v3）</span>
           </div>
           <div class="proof-pdf-controls">
             <button id="previousPdfPage" type="button" aria-label="前のページ">
@@ -95,7 +95,7 @@
         <div id="proofPdfViewport" class="proof-pdf-viewport">
           <div id="pdfLoading" class="proof-pdf-message">PDFを読み込み中…</div>
           <div id="proofPdfCanvas" class="proof-pdf-canvas">
-            <img id="proofPdfPage" alt="赤ゲラPDFのページ" />
+            <canvas id="proofPdfPage" aria-label="赤ゲラPDFのページ"></canvas>
             <div id="proofNoteOverlay" class="proof-note-overlay"></div>
           </div>
         </div>

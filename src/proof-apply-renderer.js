@@ -13,7 +13,6 @@ let pdfPage = 1;
 let pdfPageCount = 1;
 let pdfZoom = 1;
 let pdfLoadToken = 0;
-let pdfObjectUrl = null;
 
 function showNotice(message) {
   $("noticeText").textContent = message;
@@ -242,9 +241,10 @@ function renderNoteOverlay() {
 async function showPdfPage(pageNumber) {
   pdfPage = Math.max(1, Math.min(pdfPageCount, pageNumber));
   const token = ++pdfLoadToken;
-  const image = $("proofPdfPage");
+  const canvas = $("proofPdfPage");
   const message = $("pdfLoading");
   message.textContent = `PDF ${pdfPage}ページ目を読み込み中…`;
+  $("pdfStatus").textContent = `画像を受信中…（Canvas v3）`;
   message.hidden = false;
   $("proofPdfCanvas").hidden = true;
   updatePdfToolbar();
@@ -262,32 +262,35 @@ async function showPdfPage(pageNumber) {
     for (let index = 0; index < binary.length; index += 1) {
       bytes[index] = binary.charCodeAt(index);
     }
-    const objectUrl = URL.createObjectURL(
+    const bitmap = await createImageBitmap(
       new Blob([bytes], { type: payload.mimeType || "image/png" }),
     );
-    await new Promise((resolve, reject) => {
-      image.onload = resolve;
-      image.onerror = () => {
-        URL.revokeObjectURL(objectUrl);
-        reject(new Error("PDF画像を表示できません。"));
-      };
-      image.src = objectUrl;
-    });
     if (token !== pdfLoadToken) {
-      URL.revokeObjectURL(objectUrl);
+      bitmap.close();
       return;
     }
-    if (pdfObjectUrl) URL.revokeObjectURL(pdfObjectUrl);
-    pdfObjectUrl = objectUrl;
+    const context = canvas.getContext("2d", { alpha: false });
+    if (!context) {
+      bitmap.close();
+      throw new Error("PDF描画用のキャンバスを作成できませんでした。");
+    }
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    context.drawImage(bitmap, 0, 0);
+    bitmap.close();
     $("proofPdfCanvas").hidden = false;
     message.hidden = true;
+    $("pdfStatus").textContent =
+      `表示済み ${canvas.width}×${canvas.height}px・${payload.byteLength.toLocaleString()} bytes（Canvas v3）`;
     renderNoteOverlay();
     $("proofPdfViewport").scrollTo({ top: 0, left: 0 });
   } catch (error) {
     if (token !== pdfLoadToken) return;
-    image.removeAttribute("src");
+    canvas.width = 0;
+    canvas.height = 0;
     $("proofPdfCanvas").hidden = true;
     message.textContent = `PDFを表示できません: ${error.message}`;
+    $("pdfStatus").textContent = `表示エラー（Canvas v3）：${error.message}`;
     message.hidden = false;
   }
 }
