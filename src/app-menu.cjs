@@ -128,6 +128,11 @@ function installApplicationMenu({
       label: "ツール",
       submenu: [
         {
+          label: "ゲラを原稿に反映…",
+          click: () => sendMenuCommand("proof-apply"),
+        },
+        { type: "separator" },
+        {
           label: "ファイルを比較…",
           click: () => sendMenuCommand("compare"),
         },

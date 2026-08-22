@@ -6,10 +6,12 @@ const {
   createSplashWindow,
   createDictionaryWindow,
   createDiffWindow,
+  createProofApplyWindow,
 } = require("./app-windows.cjs");
 const { registerDiffIpc } = require("./diff-ipc.cjs");
 const { registerDocumentIpc } = require("./document-ipc.cjs");
 const { registerExportIpc } = require("./export-ipc.cjs");
+const { registerProofApplyIpc } = require("./proof-apply-ipc.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -20,6 +22,7 @@ let win;
 let dictionaryWin;
 let splashWin;
 const diffWindows = new Set();
+let proofApplyWin;
 let currentPath = null;
 let sessionState = { ...EMPTY_SESSION };
 let sessionWrite = Promise.resolve();
@@ -105,6 +108,26 @@ function openDiffWindow(document) {
   diffWindow.on("closed", () => diffWindows.delete(diffWindow));
 }
 
+function openProofApplyReview(state) {
+  if (proofApplyWin && !proofApplyWin.isDestroyed()) {
+    proofApplyWin.focus();
+    return proofApplyWin;
+  }
+  proofApplyWin = createProofApplyWindow(win, appIcon);
+  proofApplyWin.proofApplyState = state;
+  proofApplyWin.proofAllowClose = false;
+  proofApplyWin.once("ready-to-show", () => proofApplyWin.show());
+  proofApplyWin.on("close", (event) => {
+    if (proofApplyWin?.proofAllowClose) return;
+    event.preventDefault();
+    proofApplyWin?.webContents.send("proof:close-request");
+  });
+  proofApplyWin.on("closed", () => {
+    proofApplyWin = null;
+  });
+  return proofApplyWin;
+}
+
 registerDocumentIpc({
   getMainWindow: () => win,
   getCurrentPath: () => currentPath,
@@ -120,6 +143,11 @@ registerExportIpc({
   getCurrentPath: () => currentPath,
 });
 registerDiffIpc({ openDiffWindow });
+registerProofApplyIpc({
+  getMainWindow: () => win,
+  getCurrentPath: () => currentPath,
+  openProofApplyWindow: openProofApplyReview,
+});
 
 app.whenReady().then(async () => {
   app.setName("DRFT");

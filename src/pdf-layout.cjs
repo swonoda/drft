@@ -87,6 +87,42 @@ async function renderPage(pdfPath) {
   }
 }
 
+async function pdfPageCount(pdfPath) {
+  const pdf = await PDFDocument.load(await fs.readFile(pdfPath));
+  return pdf.getPageCount();
+}
+
+async function renderPdfPagePng(pdfPath, pageNumber, dpi = 140) {
+  const page = Number(pageNumber);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new RangeError("PDFのページ番号が不正です。");
+  }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "drft-proof-page-"));
+  const prefix = path.join(dir, "page");
+  try {
+    const command = await resolvePdfToPpm();
+    await execFileAsync(
+      command,
+      [
+        "-f",
+        String(page),
+        "-l",
+        String(page),
+        "-singlefile",
+        "-r",
+        String(dpi),
+        "-png",
+        pdfPath,
+        prefix,
+      ],
+      { windowsHide: true, shell: command.endsWith(".cmd") },
+    );
+    return fs.readFile(`${prefix}.png`);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function firstPageBoxes(pdfPath) {
   const pdf = await PDFDocument.load(await fs.readFile(pdfPath));
   const page = pdf.getPage(0);
@@ -361,4 +397,6 @@ module.exports = {
   boxToImageBounds,
   estimateHalf,
   parsePbm,
+  pdfPageCount,
+  renderPdfPagePng,
 };

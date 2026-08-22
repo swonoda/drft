@@ -77,9 +77,32 @@ function createDiffWindow(appIcon) {
   return window;
 }
 
+function createProofApplyWindow(parent, appIcon) {
+  const window = new BrowserWindow({
+    width: 1500,
+    height: 900,
+    minWidth: 980,
+    minHeight: 640,
+    parent,
+    modal: true,
+    show: false,
+    title: "ゲラを原稿に反映 — DRFT",
+    icon: appIcon,
+    backgroundColor: "#fdfdff",
+    webPreferences: {
+      preload: path.join(__dirname, "proof-apply-preload.cjs"),
+      contextIsolation: true,
+    },
+  });
+  window.setMenu(null);
+  window.loadFile(path.join(__dirname, "proof-apply.html"));
+  return window;
+}
+
 module.exports = {
   createMainWindow,
   createSplashWindow,
   createDictionaryWindow,
   createDiffWindow,
+  createProofApplyWindow,
 };

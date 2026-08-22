@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const {
   ensureTxtExtension,
+  proofReviewSnapshotPath,
   snapshotDefaultPath,
   snapshotTimestamp,
 } = require("../src/snapshot.cjs");
@@ -35,4 +36,16 @@ test("新規原稿にもスナップショット名を作る", () => {
 test("保存先にtxt拡張子がなければ追加する", () => {
   assert.equal(ensureTxtExtension("改稿前"), "改稿前.txt");
   assert.equal(ensureTxtExtension("改稿前.TXT"), "改稿前.TXT");
+});
+
+test("ゲラ反映前のスナップショット名を作る", () => {
+  assert.equal(
+    proofReviewSnapshotPath(path.join("作品", "長編.txt"), date),
+    path.join(
+      "作品",
+      "スナップショット",
+      "長編_ゲラ反映前_20260717-140309.txt",
+    ),
+  );
+  assert.equal(proofReviewSnapshotPath(null, date), null);
 });
