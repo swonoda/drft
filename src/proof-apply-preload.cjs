@@ -4,11 +4,14 @@ const { updateProofChangeRanges } = require("./proof-apply-engine.cjs");
 contextBridge.exposeInMainWorld("proofApplyApi", {
   load: () => ipcRenderer.invoke("proof:load"),
   pdfPage: (pageNumber) => ipcRenderer.invoke("proof:pdfPage", pageNumber),
+  recognize: () => ipcRenderer.invoke("proof:recognize"),
+  updateDraft: (text) => ipcRenderer.send("proof:updateDraft", text),
   commit: (text) => ipcRenderer.invoke("proof:commit", text),
   discard: () => ipcRenderer.invoke("proof:discard"),
-  closeDecision: () => ipcRenderer.invoke("proof:closeDecision"),
   updateChangeRanges: (changes, before, after) =>
     updateProofChangeRanges(changes, before, after),
-  onCloseRequest: (callback) =>
-    ipcRenderer.on("proof:close-request", () => callback()),
+  onRecognitionProgress: (callback) =>
+    ipcRenderer.on("proof:recognition-progress", (_event, progress) =>
+      callback(progress),
+    ),
 });

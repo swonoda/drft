@@ -26,6 +26,10 @@
       "LICENSE",
       "package.json"
     ],
+    "asarUnpack": [
+      "node_modules/node-poppler-win32/**/*",
+      "node_modules/@tesseract.js-data/**/*"
+    ],
     "win": {
       "icon": "build/icon.ico",
       "target": [
@@ -42,11 +46,15 @@
     }
   },
   "dependencies": {
+    "@tesseract.js-data/jpn": "^1.0.0",
+    "@tesseract.js-data/jpn_vert": "^1.0.0",
     "diff": "^8.0.4",
     "iconv-lite": "^0.7.3",
     "jszip": "^3.10.1",
     "node-poppler": "^10.0.1",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "pngjs": "^7.0.0",
+    "tesseract.js": "^7.0.0"
   },
   "optionalDependencies": {
     "node-poppler-win32": "^1.0.2"

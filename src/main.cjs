@@ -12,6 +12,7 @@ const { registerDiffIpc } = require("./diff-ipc.cjs");
 const { registerDocumentIpc } = require("./document-ipc.cjs");
 const { registerExportIpc } = require("./export-ipc.cjs");
 const { registerProofApplyIpc } = require("./proof-apply-ipc.cjs");
+const { installProofCloseHandler } = require("./proof-window-close.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -115,12 +116,10 @@ function openProofApplyReview(state) {
   }
   proofApplyWin = createProofApplyWindow(win, appIcon);
   proofApplyWin.proofApplyState = state;
-  proofApplyWin.proofAllowClose = false;
   proofApplyWin.once("ready-to-show", () => proofApplyWin.show());
-  proofApplyWin.on("close", (event) => {
-    if (proofApplyWin?.proofAllowClose) return;
-    event.preventDefault();
-    proofApplyWin?.webContents.send("proof:close-request");
+  installProofCloseHandler(proofApplyWin, {
+    dialog,
+    isQuitting: () => isQuitting,
   });
   proofApplyWin.on("closed", () => {
     proofApplyWin = null;
@@ -161,6 +160,13 @@ app.whenReady().then(async () => {
   });
   splashWin = createSplashWindow();
   win = createMainWindow(appIcon);
+  win.on("close", () => {
+    if (process.platform !== "darwin") isQuitting = true;
+    if (proofApplyWin && !proofApplyWin.isDestroyed()) {
+      proofApplyWin.proofAllowClose = true;
+      proofApplyWin.close();
+    }
+  });
   win.once("ready-to-show", () => {
     win.show();
     if (splashWin && !splashWin.isDestroyed()) splashWin.destroy();

@@ -22,7 +22,12 @@
       </div>
     </header>
 
-    <div id="notice" class="proof-notice" hidden></div>
+    <div id="notice" class="proof-notice" hidden>
+      <span id="noticeText"></span>
+      <button id="recognizeButton" class="secondary compact" type="button">
+        赤字を再読取
+      </button>
+    </div>
 
     <main class="proof-workspace">
       <section class="proof-manuscript-pane" aria-label="仮反映原稿">
@@ -36,6 +41,27 @@
           <button id="revertChange" class="secondary compact" type="button">
             この変更を元に戻す
           </button>
+        </div>
+        <div class="proof-candidate-bar">
+          <label>
+            <span>分類</span>
+            <select id="candidateType">
+              <option value="addition">追加</option>
+              <option value="replacement">置換</option>
+              <option value="deletion">削除</option>
+              <option value="other">それ以外</option>
+            </select>
+          </label>
+          <label class="candidate-text-field">
+            <span>赤字の内容</span>
+            <input id="candidateText" type="text" autocomplete="off" />
+          </label>
+          <button id="applyCandidate" class="secondary" type="button">
+            選択位置へ反映
+          </button>
+          <span id="candidateHint"
+            >追加はカーソル位置、置換・削除は選択範囲へ反映します</span
+          >
         </div>
         <div class="proof-editor-shell">
           <pre id="highlightBackdrop" aria-hidden="true"></pre>
@@ -68,7 +94,17 @@
         </div>
         <div id="proofPdfViewport" class="proof-pdf-viewport">
           <div id="pdfLoading" class="proof-pdf-message">PDFを読み込み中…</div>
-          <img id="proofPdfPage" alt="赤ゲラPDFのページ" />
+          <div id="proofPdfCanvas" class="proof-pdf-canvas">
+            <img id="proofPdfPage" alt="赤ゲラPDFのページ" />
+            <div id="proofNoteOverlay" class="proof-note-overlay"></div>
+          </div>
+        </div>
+        <div class="proof-note-panel">
+          <div class="proof-note-panel-head">
+            <strong>OCRで見つけた赤字</strong>
+            <span id="noteState">読取中…</span>
+          </div>
+          <div id="noteList" class="proof-note-list"></div>
         </div>
       </section>
     </main>

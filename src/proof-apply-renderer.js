@@ -3,13 +3,21 @@ const editor = $("workingEditor");
 const backdrop = $("highlightBackdrop");
 let state;
 let changes = [];
+let notes = [];
 let activeIndex = -1;
+let selectedNoteId = null;
 let previousText = "";
-let closeDecisionPending = false;
+let manualEdits = false;
+let recognitionRunning = false;
 let pdfPage = 1;
 let pdfPageCount = 1;
 let pdfZoom = 1;
 let pdfLoadToken = 0;
+
+function showNotice(message) {
+  $("noticeText").textContent = message;
+  $("notice").hidden = false;
+}
 
 function updateRanges(before, after) {
   changes = window.proofApplyApi.updateChangeRanges(changes, before, after);
@@ -56,9 +64,8 @@ function changeDescription(change) {
   if (change.reverted) return "この変更は元に戻しました";
   if (change.type === "addition") return `追加：${change.replacement}`;
   if (change.type === "deletion") return `削除：${change.original}`;
-  if (change.type === "replacement") {
+  if (change.type === "replacement")
     return `置換：${change.original} → ${change.replacement}`;
-  }
   return change.label || "その他の変更";
 }
 
@@ -83,6 +90,7 @@ function selectActive(index) {
   const change = changes[activeIndex];
   editor.focus();
   editor.setSelectionRange(change.draftStart, change.draftEnd);
+  if (change.page && change.page !== pdfPage) showPdfPage(change.page);
   renderHighlights();
 }
 
@@ -99,12 +107,16 @@ function revertActiveChange() {
   const current = changes.find((candidate) => candidate.id === change.id);
   if (current) current.reverted = true;
   previousText = after;
+  manualEdits = true;
+  window.proofApplyApi.updateDraft(after);
   renderHighlights();
 }
 
 editor.addEventListener("input", () => {
   updateRanges(previousText, editor.value);
   previousText = editor.value;
+  manualEdits = true;
+  window.proofApplyApi.updateDraft(editor.value);
   renderHighlights();
 });
 editor.addEventListener("scroll", () => {
@@ -128,8 +140,24 @@ editor.addEventListener("click", () => {
 $("previousChange").onclick = () => selectActive(activeIndex - 1);
 $("nextChange").onclick = () => selectActive(activeIndex + 1);
 $("revertChange").onclick = revertActiveChange;
-$("commitButton").onclick = () => window.proofApplyApi.commit(editor.value);
-$("discardButton").onclick = () => window.proofApplyApi.discard();
+$("commitButton").onclick = async () => {
+  $("commitButton").disabled = true;
+  try {
+    await window.proofApplyApi.commit(editor.value);
+  } catch (error) {
+    showNotice(`本原稿へ反映できません: ${error.message}`);
+    $("commitButton").disabled = false;
+  }
+};
+$("discardButton").onclick = async () => {
+  $("discardButton").disabled = true;
+  try {
+    await window.proofApplyApi.discard();
+  } catch (error) {
+    showNotice(`画面を閉じられません: ${error.message}`);
+    $("discardButton").disabled = false;
+  }
+};
 
 function updatePdfToolbar() {
   $("pdfPageState").textContent = `${pdfPage} / ${pdfPageCount}`;
@@ -138,7 +166,76 @@ function updatePdfToolbar() {
   $("pdfZoomState").textContent = `${Math.round(pdfZoom * 100)}%`;
   $("zoomOutPdf").disabled = pdfZoom <= 0.6;
   $("zoomInPdf").disabled = pdfZoom >= 2.4;
-  $("proofPdfPage").style.width = `${pdfZoom * 100}%`;
+  $("proofPdfCanvas").style.width = `${pdfZoom * 100}%`;
+}
+
+function noteForId(id) {
+  return notes.find((note) => note.id === id);
+}
+
+function selectNote(id) {
+  const note = noteForId(id);
+  if (!note) return;
+  selectedNoteId = id;
+  $("candidateText").value = note.text;
+  if (/トル|削除/u.test(note.text)) $("candidateType").value = "deletion";
+  updateCandidateControls();
+  renderNotes();
+  renderNoteOverlay();
+  if (note.page !== pdfPage) showPdfPage(note.page);
+}
+
+function renderNotes() {
+  const list = $("noteList");
+  list.replaceChildren();
+  $("noteState").textContent = recognitionRunning
+    ? "読取中…"
+    : `${notes.length}件`;
+  if (!notes.length && !recognitionRunning) {
+    const empty = document.createElement("span");
+    empty.className = "proof-pdf-title";
+    empty.textContent =
+      "候補はありません。PDFを見ながら赤字の内容を直接入力できます。";
+    list.append(empty);
+    return;
+  }
+  for (const note of notes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "proof-note-item";
+    if (note.id === selectedNoteId) button.classList.add("selected");
+    if (note.used) button.classList.add("used");
+    button.title = `OCR確信度 ${Math.round(note.confidence)}%`;
+    const page = document.createElement("span");
+    page.className = "page";
+    page.textContent = `${note.page}p`;
+    const text = document.createElement("span");
+    text.className = "text";
+    text.textContent = note.text;
+    button.append(page, text);
+    button.onclick = () => selectNote(note.id);
+    list.append(button);
+  }
+}
+
+function renderNoteOverlay() {
+  const overlay = $("proofNoteOverlay");
+  overlay.replaceChildren();
+  for (const note of notes.filter(
+    (candidate) => candidate.page === pdfPage && candidate.bounds,
+  )) {
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.className = "proof-note-marker";
+    if (note.id === selectedNoteId) marker.classList.add("selected");
+    marker.style.left = `${note.bounds.left * 100}%`;
+    marker.style.top = `${note.bounds.top * 100}%`;
+    marker.style.width = `${note.bounds.width * 100}%`;
+    marker.style.height = `${note.bounds.height * 100}%`;
+    marker.title = note.text;
+    marker.onclick = () => selectNote(note.id);
+    overlay.append(marker);
+  }
 }
 
 async function showPdfPage(pageNumber) {
@@ -148,7 +245,7 @@ async function showPdfPage(pageNumber) {
   const message = $("pdfLoading");
   message.textContent = `PDF ${pdfPage}ページ目を読み込み中…`;
   message.hidden = false;
-  image.hidden = true;
+  $("proofPdfCanvas").hidden = true;
   updatePdfToolbar();
   try {
     const dataUrl = await window.proofApplyApi.pdfPage(pdfPage);
@@ -159,8 +256,9 @@ async function showPdfPage(pageNumber) {
       image.src = dataUrl;
     });
     if (token !== pdfLoadToken) return;
-    image.hidden = false;
+    $("proofPdfCanvas").hidden = false;
     message.hidden = true;
+    renderNoteOverlay();
     $("proofPdfViewport").scrollTo({ top: 0, left: 0 });
   } catch (error) {
     if (token !== pdfLoadToken) return;
@@ -180,16 +278,112 @@ $("zoomInPdf").onclick = () => {
   updatePdfToolbar();
 };
 
-window.proofApplyApi.onCloseRequest(async () => {
-  if (closeDecisionPending) return;
-  closeDecisionPending = true;
-  try {
-    const decision = await window.proofApplyApi.closeDecision();
-    if (decision === "commit") await window.proofApplyApi.commit(editor.value);
-    if (decision === "discard") await window.proofApplyApi.discard();
-  } finally {
-    closeDecisionPending = false;
+function updateCandidateControls() {
+  const type = $("candidateType").value;
+  $("candidateText").disabled = type === "deletion" || type === "other";
+  $("applyCandidate").textContent =
+    type === "other" ? "確認済みにする" : "選択位置へ反映";
+}
+
+$("candidateType").onchange = updateCandidateControls;
+$("applyCandidate").onclick = () => {
+  const type = $("candidateType").value;
+  const note = noteForId(selectedNoteId);
+  if (type === "other") {
+    if (note) note.used = true;
+    renderNotes();
+    return;
   }
+  const selectionStart = editor.selectionStart;
+  const selectionEnd = editor.selectionEnd;
+  const start = selectionStart;
+  const end = type === "addition" ? selectionStart : selectionEnd;
+  if (type !== "addition" && end <= start) {
+    $("candidateHint").textContent =
+      "置換・削除する元の文字を左の原稿で選択してください";
+    return;
+  }
+  const replacement = type === "deletion" ? "" : $("candidateText").value;
+  if (type !== "deletion" && !replacement) {
+    $("candidateHint").textContent = "赤字の内容を入力してください";
+    return;
+  }
+  const before = editor.value;
+  const original = before.slice(start, end);
+  const after = before.slice(0, start) + replacement + before.slice(end);
+  updateRanges(before, after);
+  const id = `manual-${Date.now()}-${changes.length + 1}`;
+  changes.push({
+    id,
+    groupId: note?.id || null,
+    type,
+    original,
+    replacement,
+    draftStart: start,
+    draftEnd: start + replacement.length,
+    edited: false,
+    reverted: false,
+    label: note?.text || replacement,
+    confidence: note ? note.confidence / 100 : null,
+    page: note?.page || pdfPage,
+  });
+  changes.sort(
+    (left, right) =>
+      left.draftStart - right.draftStart || left.draftEnd - right.draftEnd,
+  );
+  activeIndex = changes.findIndex((change) => change.id === id);
+  editor.value = after;
+  editor.setSelectionRange(start, start + replacement.length);
+  previousText = after;
+  manualEdits = true;
+  if (note) note.used = true;
+  window.proofApplyApi.updateDraft(after);
+  $("candidateHint").textContent =
+    "仮反映しました。背景色の付いた箇所はそのまま直接編集できます";
+  renderHighlights();
+  renderNotes();
+  editor.focus();
+};
+
+async function runRecognition() {
+  if (recognitionRunning) return;
+  recognitionRunning = true;
+  $("recognizeButton").disabled = true;
+  showNotice("赤い書き込みを端末内で読み取っています…");
+  renderNotes();
+  try {
+    const result = await window.proofApplyApi.recognize();
+    if (!manualEdits && typeof result?.text === "string") {
+      editor.value = result.text;
+      previousText = result.text;
+      changes = Array.isArray(result.changes)
+        ? result.changes.map((change) => ({ ...change }))
+        : [];
+      activeIndex = changes.length ? 0 : -1;
+      window.proofApplyApi.updateDraft(editor.value);
+    }
+    notes = Array.isArray(result?.notes)
+      ? result.notes.map((note) => ({ ...note }))
+      : [];
+    selectedNoteId = notes[0]?.id || null;
+    if (notes[0]) $("candidateText").value = notes[0].text;
+    showNotice(result?.notice || "赤字の読み取りが完了しました。");
+  } catch (error) {
+    showNotice(
+      `赤字を読み取れません: ${error.message}。PDFを見ながら手入力できます。`,
+    );
+  } finally {
+    recognitionRunning = false;
+    $("recognizeButton").disabled = false;
+    renderHighlights();
+    renderNotes();
+    renderNoteOverlay();
+  }
+}
+
+$("recognizeButton").onclick = runRecognition;
+window.proofApplyApi.onRecognitionProgress((progress) => {
+  if (recognitionRunning && progress?.message) showNotice(progress.message);
 });
 
 async function initialize() {
@@ -199,19 +393,26 @@ async function initialize() {
   changes = Array.isArray(state?.changes)
     ? state.changes.map((change) => ({ ...change }))
     : [];
+  notes = Array.isArray(state?.notes)
+    ? state.notes.map((note) => ({ ...note }))
+    : [];
+  manualEdits =
+    changes.length > 0 || editor.value !== (state?.sourceText || editor.value);
   activeIndex = changes.length ? 0 : -1;
   $("sourceState").textContent =
     `${state?.sourceName || "原稿"} — 反映前スナップショットを保存済み`;
   $("pdfName").textContent = state?.pdfName || "赤ゲラPDF";
   pdfPageCount = Math.max(1, Number(state?.pdfPageCount) || 1);
-  if (state?.notice) {
-    $("notice").textContent = state.notice;
-    $("notice").hidden = false;
-  }
+  showNotice(state?.notice || "PDFを読み込みました。");
   renderHighlights();
+  renderNotes();
   updatePdfToolbar();
-  showPdfPage(1);
+  updateCandidateControls();
+  await showPdfPage(1);
+  runRecognition();
   editor.focus();
 }
 
-initialize();
+initialize().catch((error) =>
+  showNotice(`反映画面を初期化できません: ${error.message}`),
+);

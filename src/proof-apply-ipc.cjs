@@ -17,6 +17,16 @@ function registerProofApplyIpc({
   openProofApplyWindow,
   recognize = recognizeProofChanges,
 }) {
+  const commitProofWindow = (proofWindow, text) => {
+    if (!proofWindow?.proofApplyState || typeof text !== "string") return false;
+    getMainWindow()?.webContents.send("proof:applied", {
+      text,
+      snapshotPath: proofWindow.proofApplyState.snapshotPath,
+    });
+    proofWindow.proofApplyState.text = text;
+    return true;
+  };
+
   ipcMain.handle("file:openProofApply", async (_event, document) => {
     const currentPath = getCurrentPath();
     if (!currentPath) {
@@ -43,9 +53,7 @@ function registerProofApplyIpc({
     await fs.mkdir(path.dirname(snapshotPath), { recursive: true });
     await fs.writeFile(snapshotPath, encodeText(sourceText, encoding));
 
-    const recognition = await recognize(pdfPath, sourceText);
-    const draft = buildProofDraft(sourceText, recognition?.changes || []);
-    openProofApplyWindow({
+    const proofWindow = openProofApplyWindow({
       sourcePath: currentPath,
       sourceName: path.basename(currentPath),
       sourceText,
@@ -54,11 +62,14 @@ function registerProofApplyIpc({
       pdfPath,
       pdfName: path.basename(pdfPath),
       pdfPageCount: pageCount,
-      text: draft.text,
-      changes: draft.changes,
-      notice: recognition?.notice || "",
+      text: sourceText,
+      changes: [],
+      notes: [],
+      notice: "PDFを表示しました。赤字は端末内のOCRで読み取ります。",
     });
-    return { snapshotPath, changeCount: draft.changes.length };
+    proofWindow.proofCommit = () =>
+      commitProofWindow(proofWindow, proofWindow.proofApplyState.text);
+    return { snapshotPath, changeCount: 0 };
   });
 
   ipcMain.handle("proof:load", (event) => eventWindow(event)?.proofApplyState);
@@ -88,13 +99,60 @@ function registerProofApplyIpc({
     return proofWindow.proofPdfPageCache.get(page);
   });
 
+  ipcMain.handle("proof:recognize", async (event) => {
+    const proofWindow = eventWindow(event);
+    const state = proofWindow?.proofApplyState;
+    if (!proofWindow || !state)
+      throw new Error("ゲラ反映画面の状態を取得できません。");
+    if (!proofWindow.proofRecognitionPromise) {
+      proofWindow.proofRecognitionPromise = recognize(
+        state.pdfPath,
+        state.sourceText,
+        {
+          onProgress: (progress) => {
+            if (!proofWindow.isDestroyed())
+              proofWindow.webContents.send(
+                "proof:recognition-progress",
+                progress,
+              );
+          },
+        },
+      )
+        .then((recognition) => {
+          const draft = buildProofDraft(
+            state.sourceText,
+            recognition?.changes || [],
+          );
+          Object.assign(state, {
+            text: draft.text,
+            changes: draft.changes,
+            notes: Array.isArray(recognition?.notes) ? recognition.notes : [],
+            notice: recognition?.notice || "赤字の読み取りが完了しました。",
+          });
+          return {
+            text: state.text,
+            changes: state.changes,
+            notes: state.notes,
+            notice: state.notice,
+          };
+        })
+        .finally(() => {
+          proofWindow.proofRecognitionPromise = null;
+        });
+    }
+    return proofWindow.proofRecognitionPromise;
+  });
+
+  ipcMain.on("proof:updateDraft", (event, text) => {
+    const proofWindow = eventWindow(event);
+    if (proofWindow?.proofApplyState && typeof text === "string") {
+      proofWindow.proofApplyState.text = text;
+    }
+  });
+
   ipcMain.handle("proof:commit", (event, text) => {
     const proofWindow = eventWindow(event);
-    if (!proofWindow?.proofApplyState || typeof text !== "string") return false;
-    getMainWindow()?.webContents.send("proof:applied", {
-      text,
-      snapshotPath: proofWindow.proofApplyState.snapshotPath,
-    });
+    if (!commitProofWindow(proofWindow, text)) return false;
     proofWindow.proofAllowClose = true;
     proofWindow.close();
     return true;
@@ -107,19 +165,6 @@ function registerProofApplyIpc({
     proofWindow.close();
     return true;
   });
-
-  ipcMain.handle("proof:closeDecision", (event) =>
-    dialog
-      .showMessageBox(eventWindow(event), {
-        type: "question",
-        message: "ゲラの反映内容を本原稿へ反映しますか？",
-        detail: "反映前の原稿はスナップショットに保存されています。",
-        buttons: ["反映して閉じる", "破棄して閉じる", "戻る"],
-        defaultId: 0,
-        cancelId: 2,
-      })
-      .then(({ response }) => ["commit", "discard", "cancel"][response]),
-  );
 }
 
 module.exports = { registerProofApplyIpc };

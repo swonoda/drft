@@ -97,11 +97,19 @@ button:disabled {
 }
 
 .proof-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   border-bottom: 1px solid #e5dfbd;
   background: #fffbed;
   color: #6f6232;
   padding: 7px 18px;
   font-size: 12px;
+}
+
+.proof-notice[hidden] {
+  display: none;
 }
 
 .proof-workspace {
@@ -115,15 +123,20 @@ button:disabled {
   min-width: 0;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .proof-manuscript-pane {
+  grid-template-rows: auto auto minmax(0, 1fr);
   border-right: 1px solid #dfe1ea;
 }
 
+.proof-pdf-pane {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
 .proof-toolbar,
-.proof-pdf-head {
+.proof-pdf-head,
+.proof-candidate-bar {
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -131,6 +144,46 @@ button:disabled {
   border-bottom: 1px solid #e8e9f1;
   background: #f8f9fd;
   padding: 6px 12px;
+}
+
+.proof-candidate-bar {
+  min-height: 50px;
+  background: #fcfcff;
+}
+
+.proof-candidate-bar label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #65697e;
+  font-size: 11px;
+}
+
+.proof-candidate-bar select,
+.proof-candidate-bar input {
+  height: 32px;
+  border: 1px solid #d9dbe8;
+  border-radius: 7px;
+  background: #fff;
+  color: #242638;
+  padding: 5px 8px;
+}
+
+.candidate-text-field {
+  min-width: 150px;
+  flex: 1;
+}
+
+.candidate-text-field input {
+  min-width: 80px;
+  width: 100%;
+}
+
+#candidateHint {
+  max-width: 150px;
+  color: #898b9c;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 .proof-toolbar > button:not(.compact) {
@@ -284,6 +337,95 @@ button:disabled {
   margin: 0 auto;
   background: #fff;
   box-shadow: 0 3px 18px rgb(30 33 47 / 22%);
+}
+
+.proof-pdf-canvas {
+  position: relative;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.proof-note-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.proof-note-marker {
+  position: absolute;
+  min-height: 0;
+  border: 2px solid rgb(86 115 201 / 72%);
+  border-radius: 4px;
+  background: rgb(207 224 255 / 16%);
+  padding: 0;
+  pointer-events: auto;
+}
+
+.proof-note-marker.selected {
+  border-color: #4f66bd;
+  background: rgb(137 164 238 / 23%);
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 75%);
+}
+
+.proof-note-panel {
+  min-height: 96px;
+  max-height: 172px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-top: 1px solid #d6d9e4;
+  background: #f8f9fd;
+}
+
+.proof-note-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 10px 4px;
+  font-size: 11px;
+}
+
+.proof-note-panel-head span {
+  color: #777a8d;
+}
+
+.proof-note-list {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  overflow: auto;
+  padding: 4px 10px 9px;
+}
+
+.proof-note-item {
+  flex: 0 0 auto;
+  min-height: 34px;
+  max-width: 180px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.proof-note-item .page {
+  color: #777a8d;
+  font-size: 10px;
+}
+
+.proof-note-item .text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proof-note-item.selected {
+  border-color: #6875c9;
+  background: #edf1ff;
+}
+
+.proof-note-item.used {
+  opacity: 0.52;
 }
 
 .proof-pdf-message {

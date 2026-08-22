@@ -4,6 +4,7 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { PDFDocument } = require("pdf-lib");
+const { unpackedAsarPath } = require("./packaged-path.cjs");
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +14,7 @@ async function resolvePdfToPpm() {
   if (process.platform === "win32") {
     try {
       const popplerDir = require("node-poppler-win32");
-      npmPdftoppm = path.join(popplerDir, "pdftoppm.exe");
+      npmPdftoppm = unpackedAsarPath(path.join(popplerDir, "pdftoppm.exe"));
     } catch (error) {
       console.warn("node-poppler-win32の読み込みに失敗しました:", error);
     }
@@ -50,7 +51,7 @@ async function resolvePdfToPpm() {
     }
     try {
       await fs.access(candidate);
-      return candidate;
+      return unpackedAsarPath(candidate);
     } catch {
       /* try next candidate */
     }
@@ -399,4 +400,5 @@ module.exports = {
   parsePbm,
   pdfPageCount,
   renderPdfPagePng,
+  resolvePdfToPpm,
 };
