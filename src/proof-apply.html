@@ -23,7 +23,13 @@
     </header>
 
     <div id="notice" class="proof-notice" hidden>
-      <span id="noticeText"></span>
+      <div class="proof-notice-content">
+        <span id="noticeText"></span>
+        <div id="progressRow" class="proof-progress" hidden>
+          <progress id="recognitionProgress" max="100" value="0"></progress>
+          <span id="progressPercent">0%</span>
+        </div>
+      </div>
       <button id="recognizeButton" class="secondary compact" type="button">
         赤字を再読取
       </button>

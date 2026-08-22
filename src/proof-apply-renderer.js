@@ -19,6 +19,18 @@ function showNotice(message) {
   $("notice").hidden = false;
 }
 
+function showProgress(message, percent) {
+  showNotice(message);
+  const value = Math.max(0, Math.min(100, Math.round(Number(percent) || 0)));
+  $("recognitionProgress").value = value;
+  $("progressPercent").textContent = `${value}%`;
+  $("progressRow").hidden = false;
+}
+
+function hideProgress() {
+  $("progressRow").hidden = true;
+}
+
 function updateRanges(before, after) {
   changes = window.proofApplyApi.updateChangeRanges(changes, before, after);
 }
@@ -244,13 +256,14 @@ async function showPdfPage(pageNumber) {
   const canvas = $("proofPdfPage");
   const message = $("pdfLoading");
   message.textContent = `PDF ${pdfPage}ページ目を読み込み中…`;
-  $("pdfStatus").textContent = `画像を受信中…（Canvas v3）`;
+  $("pdfStatus").textContent = `PDFを画像へ変換中… 10%（Canvas v3）`;
   message.hidden = false;
   $("proofPdfCanvas").hidden = true;
   updatePdfToolbar();
   try {
     const payload = await window.proofApplyApi.pdfPage(pdfPage);
     if (token !== pdfLoadToken) return;
+    $("pdfStatus").textContent = `画像データを検査中… 40%（Canvas v3）`;
     if (!payload?.base64 || !Number.isInteger(payload.byteLength)) {
       throw new Error("PDF画像のデータを受け取れませんでした。");
     }
@@ -262,6 +275,7 @@ async function showPdfPage(pageNumber) {
     for (let index = 0; index < binary.length; index += 1) {
       bytes[index] = binary.charCodeAt(index);
     }
+    $("pdfStatus").textContent = `画像を復元中… 70%（Canvas v3）`;
     const bitmap = await createImageBitmap(
       new Blob([bytes], { type: payload.mimeType || "image/png" }),
     );
@@ -276,6 +290,7 @@ async function showPdfPage(pageNumber) {
     }
     canvas.width = bitmap.width;
     canvas.height = bitmap.height;
+    $("pdfStatus").textContent = `画面へ描画中… 90%（Canvas v3）`;
     context.drawImage(bitmap, 0, 0);
     bitmap.close();
     $("proofPdfCanvas").hidden = false;
@@ -377,7 +392,7 @@ async function runRecognition() {
   if (recognitionRunning) return;
   recognitionRunning = true;
   $("recognizeButton").disabled = true;
-  showNotice("赤い書き込みを端末内で読み取っています…");
+  showProgress("赤い書き込みの読取準備中…", 0);
   renderNotes();
   try {
     const result = await window.proofApplyApi.recognize();
@@ -395,8 +410,9 @@ async function runRecognition() {
       : [];
     selectedNoteId = notes[0]?.id || null;
     if (notes[0]) $("candidateText").value = notes[0].text;
-    showNotice(result?.notice || "赤字の読み取りが完了しました。");
+    showProgress(result?.notice || "赤字の読み取りが完了しました。", 100);
   } catch (error) {
+    hideProgress();
     showNotice(
       `赤字を読み取れません: ${error.message}。PDFを見ながら手入力できます。`,
     );
@@ -410,11 +426,21 @@ async function runRecognition() {
 }
 
 $("recognizeButton").onclick = runRecognition;
-window.proofApplyApi.onRecognitionProgress((progress) => {
-  if (recognitionRunning && progress?.message) showNotice(progress.message);
-});
+if (window.proofApplyApi) {
+  window.proofApplyApi.onRecognitionProgress((progress) => {
+    if (recognitionRunning && progress?.message) {
+      showProgress(progress.message, progress.percent);
+    }
+  });
+}
 
 async function initialize() {
+  if (!window.proofApplyApi) {
+    throw new Error(
+      "ゲラ画面の事前処理を読み込めませんでした。アプリを終了し、npm startで起動し直してください。",
+    );
+  }
+  $("pdfStatus").textContent = "画面を初期化中… 0%（Canvas v3）";
   state = await window.proofApplyApi.load();
   editor.value = state?.text || "";
   previousText = editor.value;
@@ -441,6 +467,8 @@ async function initialize() {
   editor.focus();
 }
 
-initialize().catch((error) =>
-  showNotice(`反映画面を初期化できません: ${error.message}`),
-);
+initialize().catch((error) => {
+  $("pdfStatus").textContent = `初期化エラー：${error.message}`;
+  hideProgress();
+  showNotice(`反映画面を初期化できません: ${error.message}`);
+});

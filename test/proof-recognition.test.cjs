@@ -66,3 +66,22 @@ test("ローカルOCRの赤字候補を本文とは分離して返す", async ()
   assert.deepEqual(result.notes, [note]);
   assert.match(result.notice, /1件/);
 });
+
+test("OCRの処理内容と進捗率を0%から100%まで通知する", async () => {
+  const events = [];
+  await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
+    countPages: async () => 2,
+    renderPage: async () => imageWithPixel({ red: true }),
+    recognizePage: async (_png, page, onProgress) => {
+      onProgress({ message: `${page}ページをOCR中`, progress: 0.5 });
+      return [];
+    },
+    onProgress: (progress) => events.push(progress),
+  });
+
+  assert.equal(events[0].percent, 0);
+  assert.equal(events.at(-1).percent, 100);
+  assert.ok(events.some((event) => event.percent === 25));
+  assert.ok(events.some((event) => event.percent === 75));
+  assert.ok(events.every((event) => /ページ|赤字/u.test(event.message)));
+});

@@ -92,6 +92,9 @@ function createProofApplyWindow(parent, appIcon) {
     webPreferences: {
       preload: path.join(__dirname, "proof-apply-preload.cjs"),
       contextIsolation: true,
+      // The preload imports the local proof range engine; Electron's sandboxed
+      // preload only permits a limited built-in require implementation.
+      sandbox: false,
     },
   });
   window.setMenu(null);

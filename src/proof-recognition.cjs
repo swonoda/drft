@@ -236,6 +236,7 @@ async function recognizeRedNotes(pngBuffer, page, onProgress) {
       });
       onProgress?.({
         message: `${page}ページ目の赤字 ${index + 1} / ${regions.length} を読取中`,
+        progress: (index + 1) / regions.length,
       });
       const result = await worker.recognize(cropMaskPng(image, bounds));
       const text = cleanOcrText(result?.data?.text);
@@ -282,15 +283,36 @@ async function recognizeProofChanges(
   for (let page = 1; page <= pages; page += 1) {
     onProgress?.({
       message: `${page} / ${pages}ページを画像化中`,
+      percent: Math.round(((page - 1) / pages) * 100),
       page,
       pages,
     });
     const png = await renderPage(pdfPath, page, 220);
     const image = redMask(png);
-    if (image.pixels < 40) continue;
-    redPages += 1;
-    notes.push(...(await recognizePage(png, page, onProgress)));
+    if (image.pixels >= 40) {
+      redPages += 1;
+      notes.push(
+        ...(await recognizePage(png, page, (progress) =>
+          onProgress?.({
+            ...progress,
+            pages,
+            percent: Math.round(
+              ((page - 1 + Math.max(0, Math.min(1, progress?.progress || 0))) /
+                pages) *
+                100,
+            ),
+          }),
+        )),
+      );
+    }
+    onProgress?.({
+      message: `${page} / ${pages}ページの読取完了`,
+      percent: Math.round((page / pages) * 100),
+      page,
+      pages,
+    });
   }
+  onProgress?.({ message: "赤字の読み取りが完了しました", percent: 100 });
   return {
     changes: [],
     notes,
