@@ -30,12 +30,23 @@ function snapshotDefaultPath(currentPath, date = new Date()) {
   );
 }
 
+function proofReviewSnapshotPath(currentPath, date = new Date()) {
+  if (!currentPath) return null;
+  const parsed = path.parse(currentPath);
+  return path.join(
+    parsed.dir,
+    "スナップショット",
+    `${parsed.name}_ゲラ反映前_${snapshotTimestamp(date)}.txt`,
+  );
+}
+
 function ensureTxtExtension(filePath) {
   return filePath.toLowerCase().endsWith(".txt") ? filePath : `${filePath}.txt`;
 }
 
 module.exports = {
   ensureTxtExtension,
+  proofReviewSnapshotPath,
   snapshotDefaultPath,
   snapshotTimestamp,
 };

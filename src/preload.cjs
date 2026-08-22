@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld("desktop", {
   exportEpub: (book) => ipcRenderer.invoke("file:exportEpub", book),
   openDictionary: () => ipcRenderer.invoke("dictionary:open"),
   openDiff: (document) => ipcRenderer.invoke("file:openDiff", document),
+  openProofApply: (document) =>
+    ipcRenderer.invoke("file:openProofApply", document),
+  onProofApplied: (callback) =>
+    ipcRenderer.on("proof:applied", (_event, result) => callback(result)),
   onMenuCommand: (callback) =>
     ipcRenderer.on("menu:command", (_event, command) => callback(command)),
   analyzePdfLayout: () => ipcRenderer.invoke("file:analyzePdf"),

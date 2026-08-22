@@ -6,10 +6,13 @@ const {
   createSplashWindow,
   createDictionaryWindow,
   createDiffWindow,
+  createProofApplyWindow,
 } = require("./app-windows.cjs");
 const { registerDiffIpc } = require("./diff-ipc.cjs");
 const { registerDocumentIpc } = require("./document-ipc.cjs");
 const { registerExportIpc } = require("./export-ipc.cjs");
+const { registerProofApplyIpc } = require("./proof-apply-ipc.cjs");
+const { installProofCloseHandler } = require("./proof-window-close.cjs");
 const {
   EMPTY_SESSION,
   readSessionState,
@@ -20,6 +23,7 @@ let win;
 let dictionaryWin;
 let splashWin;
 const diffWindows = new Set();
+let proofApplyWin;
 let currentPath = null;
 let sessionState = { ...EMPTY_SESSION };
 let sessionWrite = Promise.resolve();
@@ -105,6 +109,24 @@ function openDiffWindow(document) {
   diffWindow.on("closed", () => diffWindows.delete(diffWindow));
 }
 
+function openProofApplyReview(state) {
+  if (proofApplyWin && !proofApplyWin.isDestroyed()) {
+    proofApplyWin.focus();
+    return proofApplyWin;
+  }
+  proofApplyWin = createProofApplyWindow(win, appIcon);
+  proofApplyWin.proofApplyState = state;
+  proofApplyWin.once("ready-to-show", () => proofApplyWin.show());
+  installProofCloseHandler(proofApplyWin, {
+    dialog,
+    isQuitting: () => isQuitting,
+  });
+  proofApplyWin.on("closed", () => {
+    proofApplyWin = null;
+  });
+  return proofApplyWin;
+}
+
 registerDocumentIpc({
   getMainWindow: () => win,
   getCurrentPath: () => currentPath,
@@ -120,6 +142,11 @@ registerExportIpc({
   getCurrentPath: () => currentPath,
 });
 registerDiffIpc({ openDiffWindow });
+registerProofApplyIpc({
+  getMainWindow: () => win,
+  getCurrentPath: () => currentPath,
+  openProofApplyWindow: openProofApplyReview,
+});
 
 app.whenReady().then(async () => {
   app.setName("DRFT");
@@ -133,6 +160,13 @@ app.whenReady().then(async () => {
   });
   splashWin = createSplashWindow();
   win = createMainWindow(appIcon);
+  win.on("close", () => {
+    if (process.platform !== "darwin") isQuitting = true;
+    if (proofApplyWin && !proofApplyWin.isDestroyed()) {
+      proofApplyWin.proofAllowClose = true;
+      proofApplyWin.close();
+    }
+  });
   win.once("ready-to-show", () => {
     win.show();
     if (splashWin && !splashWin.isDestroyed()) splashWin.destroy();

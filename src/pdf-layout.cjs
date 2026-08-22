@@ -4,6 +4,7 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { PDFDocument } = require("pdf-lib");
+const { unpackedAsarPath } = require("./packaged-path.cjs");
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +14,7 @@ async function resolvePdfToPpm() {
   if (process.platform === "win32") {
     try {
       const popplerDir = require("node-poppler-win32");
-      npmPdftoppm = path.join(popplerDir, "pdftoppm.exe");
+      npmPdftoppm = unpackedAsarPath(path.join(popplerDir, "pdftoppm.exe"));
     } catch (error) {
       console.warn("node-poppler-win32の読み込みに失敗しました:", error);
     }
@@ -50,7 +51,7 @@ async function resolvePdfToPpm() {
     }
     try {
       await fs.access(candidate);
-      return candidate;
+      return unpackedAsarPath(candidate);
     } catch {
       /* try next candidate */
     }
@@ -82,6 +83,42 @@ async function renderPage(pdfPath) {
     );
     const file = `${prefix}.pbm`;
     return parsePbm(await fs.readFile(file));
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function pdfPageCount(pdfPath) {
+  const pdf = await PDFDocument.load(await fs.readFile(pdfPath));
+  return pdf.getPageCount();
+}
+
+async function renderPdfPagePng(pdfPath, pageNumber, dpi = 140) {
+  const page = Number(pageNumber);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new RangeError("PDFのページ番号が不正です。");
+  }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "drft-proof-page-"));
+  const prefix = path.join(dir, "page");
+  try {
+    const command = await resolvePdfToPpm();
+    await execFileAsync(
+      command,
+      [
+        "-f",
+        String(page),
+        "-l",
+        String(page),
+        "-singlefile",
+        "-r",
+        String(dpi),
+        "-png",
+        pdfPath,
+        prefix,
+      ],
+      { windowsHide: true, shell: command.endsWith(".cmd") },
+    );
+    return fs.readFile(`${prefix}.png`);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -361,4 +398,7 @@ module.exports = {
   boxToImageBounds,
   estimateHalf,
   parsePbm,
+  pdfPageCount,
+  renderPdfPagePng,
+  resolvePdfToPpm,
 };

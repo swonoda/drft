@@ -625,6 +625,30 @@ function openDiff() {
   });
 }
 
+async function openProofApply() {
+  try {
+    const result = await window.desktop.openProofApply({
+      path: filePath,
+      text: editor.value,
+      encoding,
+    });
+    if (result?.snapshotPath) {
+      setState(`ゲラ反映前のスナップショット保存済み — ${result.snapshotPath}`);
+    }
+  } catch (error) {
+    setState(`ゲラを読み込めません: ${error.message}`);
+  }
+}
+
+window.desktop.onProofApplied((result) => {
+  if (typeof result?.text !== "string") return;
+  const caret = Math.min(editor.selectionStart, result.text.length);
+  editor.value = result.text;
+  editor.setSelectionRange(caret, caret);
+  changed();
+  setState(`ゲラの修正を本原稿へ反映しました`);
+});
+
 window.desktop.onMenuCommand((command) => {
   if (typeof command === "object" && command.type === "dictionary-find") {
     findDictionaryHeading(command.heading);
@@ -639,6 +663,7 @@ window.desktop.onMenuCommand((command) => {
     pdf: openPdfDialog,
     epub: exportEpub,
     compare: openDiff,
+    "proof-apply": openProofApply,
     find: () => openFindDialog(false),
     replace: () => openFindDialog(true),
     "toggle-outline": toggleOutline,
