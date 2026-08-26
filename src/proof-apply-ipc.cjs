@@ -15,6 +15,7 @@ function eventWindow(event) {
 function registerProofApplyIpc({
   getMainWindow,
   getCurrentPath,
+  getOcrCacheDir,
   openProofApplyWindow,
   recognize = recognizeProofChanges,
 }) {
@@ -110,6 +111,7 @@ function registerProofApplyIpc({
         state.pdfPath,
         state.sourceText,
         {
+          ocrCacheDir: getOcrCacheDir?.(),
           onProgress: (progress) => {
             if (!proofWindow.isDestroyed())
               proofWindow.webContents.send(

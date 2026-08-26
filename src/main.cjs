@@ -145,6 +145,7 @@ registerDiffIpc({ openDiffWindow });
 registerProofApplyIpc({
   getMainWindow: () => win,
   getCurrentPath: () => currentPath,
+  getOcrCacheDir: () => path.join(app.getPath("userData"), "proof-ocr"),
   openProofApplyWindow: openProofApplyReview,
 });
 

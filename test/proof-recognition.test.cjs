@@ -67,6 +67,33 @@ test("ローカルOCRの赤字候補を本文とは分離して返す", async ()
   assert.match(result.notice, /1件/);
 });
 
+test("PaddleOCRは赤字ページでだけ起動し、処理後に終了する", async () => {
+  let createCalls = 0;
+  let recognizeCalls = 0;
+  let closeCalls = 0;
+  const result = await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
+    countPages: async () => 2,
+    renderPage: async (_pdfPath, page) => imageWithPixel({ red: page === 2 }),
+    createRecognizer: () => {
+      createCalls += 1;
+      return {
+        recognize: async (_png, page) => {
+          recognizeCalls += 1;
+          return [{ id: "n1", page, text: "万事に", confidence: 72 }];
+        },
+        close: async () => {
+          closeCalls += 1;
+        },
+      };
+    },
+  });
+
+  assert.equal(createCalls, 1);
+  assert.equal(recognizeCalls, 1);
+  assert.equal(closeCalls, 1);
+  assert.equal(result.notes[0].page, 2);
+});
+
 test("OCRの処理内容と進捗率を0%から100%まで通知する", async () => {
   const events = [];
   await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {

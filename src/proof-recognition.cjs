@@ -1,7 +1,6 @@
 const { PNG } = require("pngjs");
-const { createWorker, PSM } = require("tesseract.js");
 const { pdfPageCount, renderPdfPagePng } = require("./pdf-layout.cjs");
-const { unpackedAsarPath } = require("./packaged-path.cjs");
+const { createPaddleProofRecognizer } = require("./paddle-proof-ocr.cjs");
 
 function redMask(pngBuffer) {
   const image = PNG.sync.read(pngBuffer);
@@ -190,81 +189,8 @@ function cropMaskPng(image, bounds, padding = 14, scale = 2) {
   return PNG.sync.write(output);
 }
 
-function languageOptions(language) {
-  const data = require(`@tesseract.js-data/${language}`);
-  return {
-    langPath: unpackedAsarPath(data.langPath),
-    gzip: data.gzip,
-    cacheMethod: "none",
-    workerPath: require.resolve("tesseract.js/src/worker-script/node/index.js"),
-  };
-}
-
 function cleanOcrText(text) {
   return typeof text === "string" ? text.replace(/[\s|｜]+/gu, "").trim() : "";
-}
-
-async function recognizeRedNotes(pngBuffer, page, onProgress) {
-  const image = removeStraightRuns(redMask(pngBuffer));
-  if (image.pixels < 40) return [];
-  const regions = groupTextRegions(connectedComponents(image))
-    .sort((left, right) => left.top - right.top || left.left - right.left)
-    .slice(0, 60);
-  if (!regions.length) return [];
-  const workers = new Map();
-  const workerFor = async (language) => {
-    if (!workers.has(language))
-      workers.set(
-        language,
-        createWorker(language, 1, languageOptions(language)),
-      );
-    return workers.get(language);
-  };
-  const notes = [];
-  try {
-    for (let index = 0; index < regions.length; index += 1) {
-      const bounds = regions[index];
-      const width = bounds.right - bounds.left + 1;
-      const height = bounds.bottom - bounds.top + 1;
-      const vertical = height > width * 1.15;
-      const worker = await workerFor(vertical ? "jpn_vert" : "jpn");
-      await worker.setParameters({
-        tessedit_pageseg_mode: vertical
-          ? PSM.SINGLE_BLOCK_VERT_TEXT
-          : PSM.SINGLE_BLOCK,
-        preserve_interword_spaces: "0",
-      });
-      onProgress?.({
-        message: `${page}ページ目の赤字 ${index + 1} / ${regions.length} を読取中`,
-        progress: (index + 1) / regions.length,
-      });
-      const result = await worker.recognize(cropMaskPng(image, bounds));
-      const text = cleanOcrText(result?.data?.text);
-      if (!text) continue;
-      notes.push({
-        id: `red-note-${page}-${index + 1}`,
-        page,
-        text,
-        confidence: Math.max(
-          0,
-          Math.min(100, Number(result?.data?.confidence) || 0),
-        ),
-        bounds: {
-          left: bounds.left / image.width,
-          top: bounds.top / image.height,
-          width: width / image.width,
-          height: height / image.height,
-        },
-      });
-    }
-  } finally {
-    await Promise.all(
-      [...workers.values()].map(async (workerPromise) =>
-        (await workerPromise).terminate(),
-      ),
-    );
-  }
-  return notes;
 }
 
 async function recognizeProofChanges(
@@ -274,43 +200,68 @@ async function recognizeProofChanges(
     onProgress,
     countPages = pdfPageCount,
     renderPage = renderPdfPagePng,
-    recognizePage = recognizeRedNotes,
+    recognizePage,
+    createRecognizer = createPaddleProofRecognizer,
+    ocrCacheDir,
   } = {},
 ) {
   const pages = await countPages(pdfPath);
   const notes = [];
   let redPages = 0;
-  for (let page = 1; page <= pages; page += 1) {
-    onProgress?.({
-      message: `${page} / ${pages}ページを画像化中`,
-      percent: Math.round(((page - 1) / pages) * 100),
-      page,
-      pages,
+  let activePage = 1;
+  let recognizer = null;
+  const defaultRecognizePage = async (png, page, progress) => {
+    activePage = page;
+    recognizer ||= createRecognizer({
+      cacheDir: ocrCacheDir,
+      onStatus: (status) =>
+        onProgress?.({
+          message: status.message,
+          percent: Math.round(((activePage - 1) / pages) * 100),
+          page: activePage,
+          pages,
+        }),
     });
-    const png = await renderPage(pdfPath, page, 220);
-    const image = redMask(png);
-    if (image.pixels >= 40) {
-      redPages += 1;
-      notes.push(
-        ...(await recognizePage(png, page, (progress) =>
-          onProgress?.({
-            ...progress,
-            pages,
-            percent: Math.round(
-              ((page - 1 + Math.max(0, Math.min(1, progress?.progress || 0))) /
-                pages) *
-                100,
-            ),
-          }),
-        )),
-      );
+    return recognizer.recognize(png, page, progress);
+  };
+  const runPageRecognition = recognizePage || defaultRecognizePage;
+  try {
+    for (let page = 1; page <= pages; page += 1) {
+      onProgress?.({
+        message: `${page} / ${pages}ページを画像化中`,
+        percent: Math.round(((page - 1) / pages) * 100),
+        page,
+        pages,
+      });
+      const png = await renderPage(pdfPath, page, 300);
+      const image = redMask(png);
+      if (image.pixels >= 40) {
+        redPages += 1;
+        notes.push(
+          ...(await runPageRecognition(png, page, (progress) =>
+            onProgress?.({
+              ...progress,
+              pages,
+              percent: Math.round(
+                ((page -
+                  1 +
+                  Math.max(0, Math.min(1, progress?.progress || 0))) /
+                  pages) *
+                  100,
+              ),
+            }),
+          )),
+        );
+      }
+      onProgress?.({
+        message: `${page} / ${pages}ページの読取完了`,
+        percent: Math.round((page / pages) * 100),
+        page,
+        pages,
+      });
     }
-    onProgress?.({
-      message: `${page} / ${pages}ページの読取完了`,
-      percent: Math.round((page / pages) * 100),
-      page,
-      pages,
-    });
+  } finally {
+    await recognizer?.close();
   }
   onProgress?.({ message: "赤字の読み取りが完了しました", percent: 100 });
   return {
