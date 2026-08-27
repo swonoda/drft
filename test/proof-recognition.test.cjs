@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { PNG } = require("pngjs");
 const {
-  cleanOcrText,
+  locateSourceRange,
   recognizeProofChanges,
   redMask,
 } = require("../src/proof-recognition.cjs");
@@ -24,85 +24,125 @@ function imageWithPixel({ red = false } = {}) {
   return PNG.sync.write(png);
 }
 
-test("赤い画素だけをOCR対象として検出する", () => {
+test("赤い画素だけを変更箇所の検出対象にする", () => {
   assert.equal(redMask(imageWithPixel()).pixels, 0);
   assert.equal(redMask(imageWithPixel({ red: true })).pixels, 256);
 });
 
-test("OCRの改行や空白を本文候補へ持ち込まない", () => {
-  assert.equal(cleanOcrText(" 万\n事 に ｜ "), "万事に");
+test("PDFの完全一致文字列から原稿位置を求める", () => {
+  assert.deepEqual(
+    locateSourceRange(
+      "前文。サイドミラーがへし折られていた。後文。",
+      {
+        text: "サイドミラーが",
+        left: 0.2,
+        top: 0.1,
+        width: 0.1,
+        height: 0.6,
+      },
+      { x: 0.25, y: 0.55 },
+    ),
+    { draftStart: 8, draftEnd: 9, matchedText: "ー" },
+  );
+});
+
+test("PDF文字列が原稿中で一意でなければ位置を推測しない", () => {
+  assert.equal(
+    locateSourceRange(
+      "同じ語と同じ語",
+      { text: "同じ語", left: 0, top: 0, width: 1, height: 1 },
+      { x: 0.5, y: 0.5 },
+    ),
+    null,
+  );
 });
 
 test("赤字のないPDFは本文を推測で変更しない", async () => {
-  let recognizeCalls = 0;
+  let locateCalls = 0;
   const result = await recognizeProofChanges(
     "赤ゲラ.pdf",
     "文章はそのまま保持する。",
     {
       countPages: async () => 1,
       renderPage: async () => imageWithPixel(),
-      recognizePage: async () => {
-        recognizeCalls += 1;
-        return [];
+      locatePage: async () => {
+        locateCalls += 1;
+        return { locations: [] };
       },
     },
   );
 
   assert.deepEqual(result.changes, []);
   assert.deepEqual(result.notes, []);
-  assert.equal(recognizeCalls, 0);
+  assert.equal(locateCalls, 0);
   assert.match(result.notice, /本文は変更していません/);
 });
 
-test("ローカルOCRの赤字候補を本文とは分離して返す", async () => {
-  const note = { id: "n1", page: 1, text: "万事に", confidence: 72 };
-  const result = await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
+test("OpenCVの変更箇所とPDF文字位置を原稿候補として返す", async () => {
+  const word = {
+    text: "原稿",
+    left: 0.4,
+    top: 0.2,
+    width: 0.05,
+    height: 0.2,
+  };
+  const result = await recognizeProofChanges("赤ゲラ.pdf", "これは原稿です", {
     countPages: async () => 1,
     renderPage: async () => imageWithPixel({ red: true }),
-    recognizePage: async () => [note],
+    extractTextPage: async () => ({ words: [word] }),
+    locatePage: async () => ({
+      locations: [
+        {
+          bounds: { left: 0.3, top: 0.1, width: 0.2, height: 0.5 },
+          targetBounds: word,
+          targetPoint: { x: 0.42, y: 0.25 },
+          targetWordIndex: 0,
+          confidence: 80,
+        },
+      ],
+    }),
   });
 
   assert.deepEqual(result.changes, []);
-  assert.deepEqual(result.notes, [note]);
+  assert.equal(result.notes.length, 1);
+  assert.equal(result.notes[0].text, "");
+  assert.equal(result.notes[0].matchedText, "原");
+  assert.equal(result.notes[0].draftStart, 3);
   assert.match(result.notice, /1件/);
 });
 
-test("PaddleOCRは赤字ページでだけ起動し、処理後に終了する", async () => {
-  let createCalls = 0;
-  let recognizeCalls = 0;
-  let closeCalls = 0;
+test("OpenCVは赤字ページでだけ起動し、文字認識結果を作らない", async () => {
+  let locateCalls = 0;
   const result = await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
     countPages: async () => 2,
     renderPage: async (_pdfPath, page) => imageWithPixel({ red: page === 2 }),
-    createRecognizer: () => {
-      createCalls += 1;
+    extractTextPage: async () => ({ words: [] }),
+    locatePage: async () => {
+      locateCalls += 1;
       return {
-        recognize: async (_png, page) => {
-          recognizeCalls += 1;
-          return [{ id: "n1", page, text: "万事に", confidence: 72 }];
-        },
-        close: async () => {
-          closeCalls += 1;
-        },
+        locations: [
+          {
+            bounds: { left: 0.1, top: 0.1, width: 0.1, height: 0.1 },
+            confidence: 0,
+          },
+        ],
       };
     },
   });
 
-  assert.equal(createCalls, 1);
-  assert.equal(recognizeCalls, 1);
-  assert.equal(closeCalls, 1);
+  assert.equal(locateCalls, 1);
   assert.equal(result.notes[0].page, 2);
+  assert.equal(result.notes[0].text, "");
+  assert.equal(result.notes[0].draftStart, null);
 });
 
-test("OCRの処理内容と進捗率を0%から100%まで通知する", async () => {
+test("変更箇所検出の進捗率を0%から100%まで通知する", async () => {
   const events = [];
   await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
     countPages: async () => 2,
     renderPage: async () => imageWithPixel({ red: true }),
-    recognizePage: async (_png, page, onProgress) => {
-      onProgress({ message: `${page}ページをOCR中`, progress: 0.5 });
-      return [];
-    },
+    extractTextPage: async () => ({ words: [] }),
+    locatePage: async () => ({ locations: [] }),
     onProgress: (progress) => events.push(progress),
   });
 
@@ -110,5 +150,5 @@ test("OCRの処理内容と進捗率を0%から100%まで通知する", async ()
   assert.equal(events.at(-1).percent, 100);
   assert.ok(events.some((event) => event.percent === 25));
   assert.ok(events.some((event) => event.percent === 75));
-  assert.ok(events.every((event) => /ページ|赤字/u.test(event.message)));
+  assert.ok(events.every((event) => /ページ|変更箇所/u.test(event.message)));
 });

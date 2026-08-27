@@ -391,6 +391,28 @@ button:disabled {
   pointer-events: auto;
 }
 
+.proof-note-marker.annotation {
+  border-style: dashed;
+  background: rgb(207 224 255 / 8%);
+}
+
+.proof-target-marker {
+  position: absolute;
+  min-width: 8px;
+  min-height: 8px;
+  border: 2px solid rgb(230 129 50 / 82%);
+  border-radius: 3px;
+  background: rgb(255 192 94 / 22%);
+  padding: 0;
+  pointer-events: auto;
+}
+
+.proof-target-marker.selected {
+  border-color: #d65d18;
+  background: rgb(255 166 70 / 35%);
+  box-shadow: 0 0 0 2px rgb(255 255 255 / 82%);
+}
+
 .proof-note-marker.selected {
   border-color: #4f66bd;
   background: rgb(137 164 238 / 23%);

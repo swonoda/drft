@@ -33,6 +33,16 @@ function hideProgress() {
 
 function updateRanges(before, after) {
   changes = window.proofApplyApi.updateChangeRanges(changes, before, after);
+  const mappedNotes = notes.filter(
+    (note) =>
+      Number.isInteger(note.draftStart) && Number.isInteger(note.draftEnd),
+  );
+  const updated = new Map(
+    window.proofApplyApi
+      .updateChangeRanges(mappedNotes, before, after)
+      .map((note) => [note.id, note]),
+  );
+  notes = notes.map((note) => updated.get(note.id) || note);
 }
 
 function appendHighlight(change, start, end) {
@@ -72,7 +82,7 @@ function renderHighlights() {
 }
 
 function changeDescription(change) {
-  if (!change) return "変更候補はありません";
+  if (!change) return "原稿へ反映した変更はありません";
   if (change.reverted) return "この変更は元に戻しました";
   if (change.type === "addition") return `追加：${change.replacement}`;
   if (change.type === "deletion") return `削除：${change.original}`;
@@ -189,25 +199,34 @@ function selectNote(id) {
   const note = noteForId(id);
   if (!note) return;
   selectedNoteId = id;
-  $("candidateText").value = note.text;
-  if (/トル|削除/u.test(note.text)) $("candidateType").value = "deletion";
+  $("candidateText").value = note.text || "";
   updateCandidateControls();
   renderNotes();
   renderNoteOverlay();
   if (note.page !== pdfPage) showPdfPage(note.page);
+  if (Number.isInteger(note.draftStart) && Number.isInteger(note.draftEnd)) {
+    editor.focus();
+    editor.setSelectionRange(note.draftStart, note.draftEnd);
+    $("candidateHint").textContent = note.matchedText
+      ? `原稿の「${note.matchedText}」付近を選択しました。位置と分類を確認してください`
+      : "原稿中の候補位置を選択しました。位置と分類を確認してください";
+  } else {
+    $("candidateHint").textContent =
+      "原稿位置は特定できませんでした。左の原稿で対象位置を選択してください";
+  }
 }
 
 function renderNotes() {
   const list = $("noteList");
   list.replaceChildren();
   $("noteState").textContent = recognitionRunning
-    ? "読取中…"
+    ? "検出中…"
     : `${notes.length}件`;
   if (!notes.length && !recognitionRunning) {
     const empty = document.createElement("span");
     empty.className = "proof-pdf-title";
     empty.textContent =
-      "候補はありません。PDFを見ながら赤字の内容を直接入力できます。";
+      "変更箇所を検出できませんでした。PDFを見ながら直接入力できます。";
     list.append(empty);
     return;
   }
@@ -217,13 +236,17 @@ function renderNotes() {
     button.className = "proof-note-item";
     if (note.id === selectedNoteId) button.classList.add("selected");
     if (note.used) button.classList.add("used");
-    button.title = `OCR確信度 ${Math.round(note.confidence)}%`;
+    button.title = Number.isInteger(note.draftStart)
+      ? "原稿位置の候補あり"
+      : "原稿位置は未特定";
     const page = document.createElement("span");
     page.className = "page";
     page.textContent = `${note.page}p`;
     const text = document.createElement("span");
     text.className = "text";
-    text.textContent = note.text;
+    text.textContent = note.matchedText
+      ? `${note.label}（「${note.matchedText}」付近）`
+      : note.label;
     button.append(page, text);
     button.onclick = () => selectNote(note.id);
     list.append(button);
@@ -238,15 +261,28 @@ function renderNoteOverlay() {
   )) {
     const marker = document.createElement("button");
     marker.type = "button";
-    marker.className = "proof-note-marker";
+    marker.className = "proof-note-marker annotation";
     if (note.id === selectedNoteId) marker.classList.add("selected");
     marker.style.left = `${note.bounds.left * 100}%`;
     marker.style.top = `${note.bounds.top * 100}%`;
     marker.style.width = `${note.bounds.width * 100}%`;
     marker.style.height = `${note.bounds.height * 100}%`;
-    marker.title = note.text;
+    marker.title = note.label;
     marker.onclick = () => selectNote(note.id);
     overlay.append(marker);
+    if (note.targetBounds) {
+      const target = document.createElement("button");
+      target.type = "button";
+      target.className = "proof-target-marker";
+      if (note.id === selectedNoteId) target.classList.add("selected");
+      target.style.left = `${note.targetBounds.left * 100}%`;
+      target.style.top = `${note.targetBounds.top * 100}%`;
+      target.style.width = `${note.targetBounds.width * 100}%`;
+      target.style.height = `${note.targetBounds.height * 100}%`;
+      target.title = `${note.label}が指している本文位置の候補`;
+      target.onclick = () => selectNote(note.id);
+      overlay.append(target);
+    }
   }
 }
 
@@ -392,7 +428,7 @@ async function runRecognition() {
   if (recognitionRunning) return;
   recognitionRunning = true;
   $("recognizeButton").disabled = true;
-  showProgress("赤い書き込みの読取準備中…", 0);
+  showProgress("赤い書き込みの変更箇所を検出する準備中…", 0);
   renderNotes();
   try {
     const result = await window.proofApplyApi.recognize();
@@ -409,12 +445,15 @@ async function runRecognition() {
       ? result.notes.map((note) => ({ ...note }))
       : [];
     selectedNoteId = notes[0]?.id || null;
-    if (notes[0]) $("candidateText").value = notes[0].text;
-    showProgress(result?.notice || "赤字の読み取りが完了しました。", 100);
+    if (notes[0]) {
+      $("candidateText").value = "";
+      selectNote(notes[0].id);
+    }
+    showProgress(result?.notice || "変更箇所の検出が完了しました。", 100);
   } catch (error) {
     hideProgress();
     showNotice(
-      `赤字を読み取れません: ${error.message}。PDFを見ながら手入力できます。`,
+      `変更箇所を検出できません: ${error.message}。PDFを見ながら手入力できます。`,
     );
   } finally {
     recognitionRunning = false;

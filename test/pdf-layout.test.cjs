@@ -5,7 +5,28 @@ const os = require("node:os");
 const path = require("node:path");
 const { PDFDocument } = require("pdf-lib");
 
-const { boxToImageBounds, pdfPageCount } = require("../src/pdf-layout.cjs");
+const {
+  boxToImageBounds,
+  parsePdfTextBoxes,
+  pdfPageCount,
+} = require("../src/pdf-layout.cjs");
+
+test("pdftotextの文字座標をページ比率へ変換する", () => {
+  const result = parsePdfTextBoxes(`
+    <page width="200.000000" height="100.000000">
+      <word xMin="20.000000" yMin="10.000000" xMax="60.000000" yMax="30.000000">赤&amp;字</word>
+    </page>
+  `);
+  assert.deepEqual(result.words, [
+    {
+      text: "赤&字",
+      left: 0.1,
+      top: 0.1,
+      width: 0.2,
+      height: 0.2,
+    },
+  ]);
+});
 
 test("PDFのTrimBoxをレンダリング画像上の領域へ変換する", () => {
   const image = { width: 1600, height: 1200 };

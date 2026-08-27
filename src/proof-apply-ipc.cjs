@@ -15,7 +15,6 @@ function eventWindow(event) {
 function registerProofApplyIpc({
   getMainWindow,
   getCurrentPath,
-  getOcrCacheDir,
   openProofApplyWindow,
   recognize = recognizeProofChanges,
 }) {
@@ -67,7 +66,8 @@ function registerProofApplyIpc({
       text: sourceText,
       changes: [],
       notes: [],
-      notice: "PDFを表示しました。赤字は端末内のOCRで読み取ります。",
+      notice:
+        "PDFを表示しました。赤字の変更箇所を端末内のOpenCVで検出します。文字内容は読み取りません。",
     });
     proofWindow.proofCommit = () =>
       commitProofWindow(proofWindow, proofWindow.proofApplyState.text);
@@ -111,7 +111,6 @@ function registerProofApplyIpc({
         state.pdfPath,
         state.sourceText,
         {
-          ocrCacheDir: getOcrCacheDir?.(),
           onProgress: (progress) => {
             if (!proofWindow.isDestroyed())
               proofWindow.webContents.send(
@@ -130,7 +129,7 @@ function registerProofApplyIpc({
             text: draft.text,
             changes: draft.changes,
             notes: Array.isArray(recognition?.notes) ? recognition.notes : [],
-            notice: recognition?.notice || "赤字の読み取りが完了しました。",
+            notice: recognition?.notice || "変更箇所の検出が完了しました。",
           });
           return {
             text: state.text,

@@ -66,22 +66,23 @@ function findPython() {
 try {
   if (!fs.existsSync(venvPython)) {
     const python = findPython();
-    console.log(`OCR専用環境を準備します: ${runtimeDir}`);
+    console.log(`赤ゲラ検出専用環境を準備します: ${runtimeDir}`);
     launch(python.command, [...python.prefix, "-m", "venv", runtimeDir]);
   }
   console.log(
-    "PaddleOCRとOpenCVをインストールしています。数分かかることがあります。",
+    "OpenCVをインストールしています。少し時間がかかることがあります。",
   );
   launch(venvPython, [
     "-m",
     "pip",
     "install",
     "--disable-pip-version-check",
-    "paddlepaddle==3.3.1",
-    "paddleocr==3.7.0",
+    "opencv-python-headless>=4.10,<5",
   ]);
-  console.log("OCRの準備が完了しました。npm startでDRFTを起動できます。");
+  console.log(
+    "変更箇所検出の準備が完了しました。npm startでDRFTを起動できます。",
+  );
 } catch (error) {
-  console.error(`OCRの準備に失敗しました: ${error.message}`);
+  console.error(`変更箇所検出の準備に失敗しました: ${error.message}`);
   process.exitCode = 1;
 }

@@ -24,11 +24,11 @@ Node.js 22.12以降とnpmが必要です。
 git clone https://github.com/swonoda/drft.git
 cd drft
 npm install
-npm run ocr:setup
+npm run proof:setup
 npm start
 ```
 
-`npm run ocr:setup` は赤ゲラPDFの手書き文字を端末内で読み取るためのOpenCVとPaddleOCRを、DRFT専用の環境へ準備します。初回のみ実行してください。文書画像は外部サービスへ送信しません。
+`npm run proof:setup` は赤ゲラPDFの赤い書き込みと変更箇所を検出するOpenCVを、DRFT専用の環境へ準備します。初回のみ実行してください。OCRによる文字認識は行わず、赤字の内容は画面で手入力します。文書画像は外部サービスへ送信しません。以前の `npm run ocr:setup` も同じ準備コマンドとして利用できます。
 
 ソースコードからの起動はmacOSでも可能です。配布パッケージは現在Windows版のみ用意しています。
 

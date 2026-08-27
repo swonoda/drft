@@ -31,7 +31,7 @@
         </div>
       </div>
       <button id="recognizeButton" class="secondary compact" type="button">
-        赤字を再読取
+        変更箇所を再検出
       </button>
     </div>
 
@@ -43,7 +43,7 @@
           </button>
           <span id="changeState">0 / 0</span>
           <button id="nextChange" type="button" aria-label="次の変更">›</button>
-          <span id="changeDescription">変更候補はありません</span>
+          <span id="changeDescription">原稿へ反映した変更はありません</span>
           <button id="revertChange" class="secondary compact" type="button">
             この変更を元に戻す
           </button>
@@ -107,8 +107,8 @@
         </div>
         <div class="proof-note-panel">
           <div class="proof-note-panel-head">
-            <strong>OCRで見つけた赤字</strong>
-            <span id="noteState">読取中…</span>
+            <strong>検出した変更箇所</strong>
+            <span id="noteState">検出中…</span>
           </div>
           <div id="noteList" class="proof-note-list"></div>
         </div>

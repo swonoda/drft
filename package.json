@@ -8,7 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test",
-    "ocr:setup": "node scripts/setup-ocr.cjs",
+    "proof:setup": "node scripts/setup-ocr.cjs",
+    "ocr:setup": "npm run proof:setup",
     "dist:win": "electron-builder --win nsis portable"
   },
   "devDependencies": {

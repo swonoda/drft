@@ -1,6 +1,10 @@
 const { PNG } = require("pngjs");
-const { pdfPageCount, renderPdfPagePng } = require("./pdf-layout.cjs");
-const { createPaddleProofRecognizer } = require("./paddle-proof-ocr.cjs");
+const {
+  extractPdfTextPage,
+  pdfPageCount,
+  renderPdfPagePng,
+} = require("./pdf-layout.cjs");
+const { locateProofMarks } = require("./opencv-proof-locator.cjs");
 
 function redMask(pngBuffer) {
   const image = PNG.sync.read(pngBuffer);
@@ -193,83 +197,161 @@ function cleanOcrText(text) {
   return typeof text === "string" ? text.replace(/[\s|｜]+/gu, "").trim() : "";
 }
 
+function compactCharacters(text) {
+  const characters = [];
+  const rawIndexes = [];
+  let rawIndex = 0;
+  for (const character of String(text || "")) {
+    if (!/\s/u.test(character)) {
+      characters.push(character);
+      rawIndexes.push(rawIndex);
+    }
+    rawIndex += character.length;
+  }
+  return { characters, rawIndexes };
+}
+
+function uniqueSequenceIndex(haystack, needle) {
+  if (!needle.length || needle.length > haystack.length) return -1;
+  let found = -1;
+  for (let index = 0; index <= haystack.length - needle.length; index += 1) {
+    let matches = true;
+    for (let offset = 0; offset < needle.length; offset += 1) {
+      if (haystack[index + offset] !== needle[offset]) {
+        matches = false;
+        break;
+      }
+    }
+    if (!matches) continue;
+    if (found >= 0) return -1;
+    found = index;
+  }
+  return found;
+}
+
+function locateSourceRange(sourceText, word, targetPoint) {
+  if (!word?.text) return null;
+  const source = compactCharacters(sourceText);
+  const target = compactCharacters(word.text).characters;
+  const sequenceStart = uniqueSequenceIndex(source.characters, target);
+  if (sequenceStart < 0) return null;
+
+  let characterIndex = 0;
+  if (target.length > 1 && targetPoint) {
+    const vertical = word.height > word.width * 1.25;
+    const origin = vertical ? word.top : word.left;
+    const size = vertical ? word.height : word.width;
+    const position = vertical ? targetPoint.y : targetPoint.x;
+    const ratio = size > 0 ? (position - origin) / size : 0;
+    characterIndex = Math.max(
+      0,
+      Math.min(target.length - 1, Math.floor(ratio * target.length)),
+    );
+  }
+  const compactStart = sequenceStart + characterIndex;
+  const draftStart = source.rawIndexes[compactStart];
+  const character = source.characters[compactStart];
+  return {
+    draftStart,
+    draftEnd: draftStart + character.length,
+    matchedText: character,
+  };
+}
+
 async function recognizeProofChanges(
   pdfPath,
-  _sourceText,
+  sourceText,
   {
     onProgress,
     countPages = pdfPageCount,
     renderPage = renderPdfPagePng,
-    recognizePage,
-    createRecognizer = createPaddleProofRecognizer,
-    ocrCacheDir,
+    extractTextPage = extractPdfTextPage,
+    locatePage = locateProofMarks,
   } = {},
 ) {
   const pages = await countPages(pdfPath);
   const notes = [];
   let redPages = 0;
-  let activePage = 1;
-  let recognizer = null;
-  const defaultRecognizePage = async (png, page, progress) => {
-    activePage = page;
-    recognizer ||= createRecognizer({
-      cacheDir: ocrCacheDir,
-      onStatus: (status) =>
-        onProgress?.({
-          message: status.message,
-          percent: Math.round(((activePage - 1) / pages) * 100),
-          page: activePage,
-          pages,
-        }),
+  let pagesWithoutText = 0;
+  for (let page = 1; page <= pages; page += 1) {
+    onProgress?.({
+      message: `${page} / ${pages}ページを画像化中`,
+      percent: Math.round(((page - 1) / pages) * 100),
+      page,
+      pages,
     });
-    return recognizer.recognize(png, page, progress);
-  };
-  const runPageRecognition = recognizePage || defaultRecognizePage;
-  try {
-    for (let page = 1; page <= pages; page += 1) {
+    const png = await renderPage(pdfPath, page, 300);
+    const image = redMask(png);
+    if (image.pixels >= 40) {
+      redPages += 1;
       onProgress?.({
-        message: `${page} / ${pages}ページを画像化中`,
-        percent: Math.round(((page - 1) / pages) * 100),
+        message: `${page} / ${pages}ページの変更箇所を検出中`,
+        percent: Math.round(((page - 0.5) / pages) * 100),
         page,
         pages,
       });
-      const png = await renderPage(pdfPath, page, 300);
-      const image = redMask(png);
-      if (image.pixels >= 40) {
-        redPages += 1;
-        notes.push(
-          ...(await runPageRecognition(png, page, (progress) =>
-            onProgress?.({
-              ...progress,
-              pages,
-              percent: Math.round(
-                ((page -
-                  1 +
-                  Math.max(0, Math.min(1, progress?.progress || 0))) /
-                  pages) *
-                  100,
-              ),
-            }),
-          )),
-        );
+      let textPage = { words: [] };
+      try {
+        textPage = await extractTextPage(pdfPath, page);
+      } catch {
+        textPage = { words: [] };
       }
-      onProgress?.({
-        message: `${page} / ${pages}ページの読取完了`,
-        percent: Math.round((page / pages) * 100),
-        page,
-        pages,
-      });
+      if (!textPage.words?.length) pagesWithoutText += 1;
+      const located = await locatePage(png, { words: textPage.words || [] });
+      for (const location of located.locations || []) {
+        const word = Number.isInteger(location.targetWordIndex)
+          ? textPage.words[location.targetWordIndex]
+          : null;
+        const sourceRange = locateSourceRange(
+          sourceText,
+          word,
+          location.targetPoint,
+        );
+        const number = notes.length + 1;
+        notes.push({
+          id: `location-${page}-${number}`,
+          page,
+          text: "",
+          label: `変更箇所 ${number}`,
+          bounds: location.bounds,
+          targetBounds: location.targetBounds,
+          targetPoint: location.targetPoint,
+          confidence: Number(location.confidence) || 0,
+          draftStart: sourceRange?.draftStart ?? null,
+          draftEnd: sourceRange?.draftEnd ?? null,
+          matchedText: sourceRange?.matchedText || "",
+        });
+      }
     }
-  } finally {
-    await recognizer?.close();
+    onProgress?.({
+      message: `${page} / ${pages}ページの検出完了`,
+      percent: Math.round((page / pages) * 100),
+      page,
+      pages,
+    });
   }
-  onProgress?.({ message: "赤字の読み取りが完了しました", percent: 100 });
+  onProgress?.({ message: "変更箇所の検出が完了しました", percent: 100 });
+  const mapped = notes.filter((note) =>
+    Number.isInteger(note.draftStart),
+  ).length;
+  let notice;
+  if (!redPages) {
+    notice =
+      "赤い書き込みのあるページは見つかりませんでした。本文は変更していません。";
+  } else if (!notes.length) {
+    notice =
+      "赤字は見つかりましたが、変更箇所として分けられませんでした。本文は変更していません。";
+  } else {
+    notice = `変更箇所を${notes.length}件検出しました。${mapped}件は原稿中の候補位置まで特定できました。赤字の内容は手入力して確認してください。`;
+    if (pagesWithoutText) {
+      notice +=
+        " PDFに文字情報がない箇所は原稿位置を自動選択できないため、左の原稿で選択してください。";
+    }
+  }
   return {
     changes: [],
     notes,
-    notice: redPages
-      ? `赤い書き込みを${notes.length}件の候補に分けました。候補文字を確認し、左の選択位置へ追加・置換・削除してください。`
-      : "赤い書き込みのあるページは見つかりませんでした。本文は変更していません。",
+    notice,
   };
 }
 
@@ -278,6 +360,7 @@ module.exports = {
   connectedComponents,
   cropMaskPng,
   groupTextRegions,
+  locateSourceRange,
   recognizeProofChanges,
   redMask,
   removeStraightRuns,
