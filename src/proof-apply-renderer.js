@@ -2,6 +2,7 @@ const $ = (id) => document.getElementById(id);
 const editor = $("workingEditor");
 const backdrop = $("highlightBackdrop");
 const noteBackdrop = $("noteBackdrop");
+const backdropLayers = [noteBackdrop, backdrop];
 let state;
 let changes = [];
 let notes = [];
@@ -60,6 +61,16 @@ function appendHighlight(change, start, end) {
   backdrop.append(span);
 }
 
+function syncBackdropGeometry() {
+  const width = editor.clientWidth;
+  const height = editor.clientHeight;
+  if (!width || !height) return;
+  for (const layer of backdropLayers) {
+    layer.style.width = `${width}px`;
+    layer.style.height = `${height}px`;
+  }
+}
+
 function punctuationRangeAt(text, start, end = start) {
   const value = String(text || "");
   const boundary = /[、。！？!?\n]/u;
@@ -104,6 +115,7 @@ function renderNoteHighlight() {
 }
 
 function renderHighlights() {
+  syncBackdropGeometry();
   backdrop.replaceChildren();
   let cursor = 0;
   const visible = changes
@@ -205,6 +217,12 @@ editor.addEventListener("click", () => {
     renderHighlights();
   }
 });
+
+if (typeof ResizeObserver === "function") {
+  new ResizeObserver(() => renderHighlights()).observe(editor);
+} else {
+  window.addEventListener("resize", renderHighlights);
+}
 
 $("previousChange").onclick = () => selectActive(activeIndex - 1);
 $("nextChange").onclick = () => selectActive(activeIndex + 1);
