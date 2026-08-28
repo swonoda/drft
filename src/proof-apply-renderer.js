@@ -358,7 +358,8 @@ async function showPdfPage(pageNumber) {
     $("proofPdfCanvas").hidden = false;
     message.hidden = true;
     $("pdfStatus").textContent =
-      `表示済み ${canvas.width}×${canvas.height}px・${payload.byteLength.toLocaleString()} bytes（Canvas v3）`;
+      `表示済み ${canvas.width}×${canvas.height}px・${payload.byteLength.toLocaleString()} bytes` +
+      `（${payload.renderer || "PDF変換器不明"} → Canvas v3）`;
     renderNoteOverlay();
     $("proofPdfViewport").scrollTo({ top: 0, left: 0 });
   } catch (error) {

@@ -63,6 +63,10 @@ async function resolvePdfToPpm() {
   return resolvePopplerTool("pdftoppm", "PDFTOPPM");
 }
 
+async function resolvePdfToCairo() {
+  return resolvePopplerTool("pdftocairo", "PDFTOCAIRO");
+}
+
 async function resolvePdfToText() {
   return resolvePopplerTool("pdftotext", "PDFTOTEXT");
 }
@@ -109,10 +113,20 @@ async function renderPdfPagePng(pdfPath, pageNumber, dpi = 140) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "drft-proof-page-"));
   const prefix = path.join(dir, "page");
   try {
-    const command = await resolvePdfToPpm();
+    let command;
+    let useCairo = false;
+    try {
+      command = await resolvePdfToCairo();
+      useCairo = true;
+    } catch {
+      command = await resolvePdfToPpm();
+    }
+    const argumentsBeforePath = useCairo ? ["-png"] : [];
+    const argumentsAfterPage = useCairo ? [] : ["-png"];
     await execFileAsync(
       command,
       [
+        ...argumentsBeforePath,
         "-f",
         String(page),
         "-l",
@@ -120,13 +134,15 @@ async function renderPdfPagePng(pdfPath, pageNumber, dpi = 140) {
         "-singlefile",
         "-r",
         String(dpi),
-        "-png",
+        ...argumentsAfterPage,
         pdfPath,
         prefix,
       ],
       { windowsHide: true, shell: command.endsWith(".cmd") },
     );
-    return fs.readFile(`${prefix}.png`);
+    const png = await fs.readFile(`${prefix}.png`);
+    png.renderer = useCairo ? "pdftocairo" : "pdftoppm";
+    return png;
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
@@ -483,6 +499,7 @@ module.exports = {
   pdfPageCount,
   extractPdfTextPage,
   renderPdfPagePng,
+  resolvePdfToCairo,
   resolvePdfToPpm,
   resolvePdfToText,
 };

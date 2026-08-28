@@ -229,6 +229,58 @@ function uniqueSequenceIndex(haystack, needle) {
   return found;
 }
 
+function verticalReadingOrder(words) {
+  const positioned = words
+    .map((word, index) => ({ word, index }))
+    .filter(
+      ({ word }) =>
+        Number.isFinite(word?.left) &&
+        Number.isFinite(word?.top) &&
+        Number.isFinite(word?.width) &&
+        Number.isFinite(word?.height),
+    );
+  if (positioned.length < 2) return words;
+
+  const widths = positioned
+    .map(({ word }) => word.width)
+    .filter((width) => width > 0)
+    .sort((left, right) => left - right);
+  const medianWidth = widths[Math.floor(widths.length / 2)] || 0.01;
+  const tolerance = Math.max(0.004, medianWidth * 0.8);
+  const columns = [];
+
+  for (const entry of positioned.sort(
+    (left, right) => right.word.left - left.word.left,
+  )) {
+    const center = entry.word.left + entry.word.width / 2;
+    let column = columns.find(
+      (candidate) => Math.abs(candidate.center - center) <= tolerance,
+    );
+    if (!column) {
+      column = { center, entries: [] };
+      columns.push(column);
+    }
+    column.entries.push(entry);
+    column.center =
+      column.entries.reduce(
+        (total, candidate) =>
+          total + candidate.word.left + candidate.word.width / 2,
+        0,
+      ) / column.entries.length;
+  }
+
+  return columns
+    .sort((left, right) => right.center - left.center)
+    .flatMap((column) =>
+      column.entries
+        .sort(
+          (left, right) =>
+            left.word.top - right.word.top || left.index - right.index,
+        )
+        .map(({ word }) => word),
+    );
+}
+
 function locateSourceRange(
   sourceText,
   word,
@@ -300,6 +352,25 @@ function locateSourceRange(
   };
 }
 
+function locateSourceRangeFromPage(sourceText, words, targetWordIndex, point) {
+  if (!Number.isInteger(targetWordIndex) || !words?.[targetWordIndex]) {
+    return null;
+  }
+  const word = words[targetWordIndex];
+  const orders = [words, verticalReadingOrder(words)];
+  const checked = new Set();
+  for (const order of orders) {
+    const index = order.indexOf(word);
+    if (index < 0) continue;
+    const key = order.map((candidate) => candidate?.text || "").join("\u0000");
+    if (checked.has(key)) continue;
+    checked.add(key);
+    const range = locateSourceRange(sourceText, word, point, order, index);
+    if (range) return range;
+  }
+  return null;
+}
+
 async function recognizeProofChanges(
   pdfPath,
   sourceText,
@@ -315,6 +386,7 @@ async function recognizeProofChanges(
   const notes = [];
   let redPages = 0;
   let pagesWithoutText = 0;
+  let textExtractionErrors = 0;
   for (let page = 1; page <= pages; page += 1) {
     onProgress?.({
       message: `${page} / ${pages}ページを画像化中`,
@@ -336,20 +408,17 @@ async function recognizeProofChanges(
       try {
         textPage = await extractTextPage(pdfPath, page);
       } catch {
+        textExtractionErrors += 1;
         textPage = { words: [] };
       }
       if (!textPage.words?.length) pagesWithoutText += 1;
       const located = await locatePage(png, { words: textPage.words || [] });
       for (const location of located.locations || []) {
-        const word = Number.isInteger(location.targetWordIndex)
-          ? textPage.words[location.targetWordIndex]
-          : null;
-        const sourceRange = locateSourceRange(
+        const sourceRange = locateSourceRangeFromPage(
           sourceText,
-          word,
-          location.targetPoint,
           textPage.words,
           location.targetWordIndex,
+          location.targetPoint,
         );
         const number = notes.length + 1;
         notes.push({
@@ -388,8 +457,12 @@ async function recognizeProofChanges(
   } else {
     notice = `変更箇所を${notes.length}件検出しました。${mapped}件は原稿中の候補位置まで特定できました。赤字の内容は手入力して確認してください。`;
     if (pagesWithoutText) {
+      notice += textExtractionErrors
+        ? " PDFの文字情報を読み出せないページは原稿位置を自動選択できません。PDF変換環境を確認してください。"
+        : " PDFに文字情報がないページは原稿位置を自動選択できません。画像化された本文から位置を得るには印刷本文のOCRが必要です。";
+    } else if (!mapped) {
       notice +=
-        " PDFに文字情報がない箇所は原稿位置を自動選択できないため、左の原稿で選択してください。";
+        " PDF本文と原稿の文脈が一致せず、原稿位置は自動選択していません。";
     }
   }
   return {
@@ -405,7 +478,9 @@ module.exports = {
   cropMaskPng,
   groupTextRegions,
   locateSourceRange,
+  locateSourceRangeFromPage,
   recognizeProofChanges,
   redMask,
   removeStraightRuns,
+  verticalReadingOrder,
 };

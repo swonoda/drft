@@ -3,8 +3,10 @@ const assert = require("node:assert/strict");
 const { PNG } = require("pngjs");
 const {
   locateSourceRange,
+  locateSourceRangeFromPage,
   recognizeProofChanges,
   redMask,
+  verticalReadingOrder,
 } = require("../src/proof-recognition.cjs");
 
 function imageWithPixel({ red = false } = {}) {
@@ -83,6 +85,38 @@ test("一文字のPDF座標は文脈が一致しなければ原稿位置を推�
   assert.equal(
     locateSourceRange("原稿には一文字だけある。", words[0], null, words, 0),
     null,
+  );
+});
+
+test("縦書きPDFの文字を右列から左列、各列は上から下へ並べる", () => {
+  const words = [
+    { text: "あ", left: 0.8, top: 0.1, width: 0.02, height: 0.02 },
+    { text: "か", left: 0.7, top: 0.1, width: 0.02, height: 0.02 },
+    { text: "い", left: 0.8, top: 0.2, width: 0.02, height: 0.02 },
+    { text: "き", left: 0.7, top: 0.2, width: 0.02, height: 0.02 },
+    { text: "う", left: 0.8, top: 0.3, width: 0.02, height: 0.02 },
+    { text: "く", left: 0.7, top: 0.3, width: 0.02, height: 0.02 },
+  ];
+  assert.equal(
+    verticalReadingOrder(words)
+      .map((word) => word.text)
+      .join(""),
+    "あいうかきく",
+  );
+});
+
+test("PDF配列順が違っても縦書き座標順の文脈から原稿位置を求める", () => {
+  const words = [
+    { text: "あ", left: 0.8, top: 0.1, width: 0.02, height: 0.02 },
+    { text: "か", left: 0.7, top: 0.1, width: 0.02, height: 0.02 },
+    { text: "い", left: 0.8, top: 0.2, width: 0.02, height: 0.02 },
+    { text: "き", left: 0.7, top: 0.2, width: 0.02, height: 0.02 },
+    { text: "う", left: 0.8, top: 0.3, width: 0.02, height: 0.02 },
+    { text: "く", left: 0.7, top: 0.3, width: 0.02, height: 0.02 },
+  ];
+  assert.deepEqual(
+    locateSourceRangeFromPage("前。あいうかきく。後。", words, 3, null),
+    { draftStart: 6, draftEnd: 7, matchedText: "き" },
   );
 });
 

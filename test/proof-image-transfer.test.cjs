@@ -8,7 +8,14 @@ test("PDFページのPNGを欠落検査付きで画面用データへ変換す�
 
   assert.equal(payload.mimeType, "image/png");
   assert.equal(payload.byteLength, png.length);
+  assert.equal(payload.renderer, null);
   assert.deepEqual(Buffer.from(payload.base64, "base64"), png);
+});
+
+test("PDFの描画に使った変換器を画面へ伝える", () => {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  png.renderer = "pdftocairo";
+  assert.equal(createPngPayload(png).renderer, "pdftocairo");
 });
 
 test("PNGではない変換結果を画面へ渡さない", () => {

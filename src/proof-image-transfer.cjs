@@ -13,6 +13,7 @@ function createPngPayload(png) {
     mimeType: "image/png",
     base64: png.toString("base64"),
     byteLength: png.length,
+    renderer: typeof png.renderer === "string" ? png.renderer : null,
   };
 }
 
