@@ -244,6 +244,7 @@ function selectNote(id) {
 
 function renderNotes() {
   const list = $("noteList");
+  const previousScrollTop = list.scrollTop;
   list.replaceChildren();
   $("noteState").textContent = recognitionRunning
     ? "検出中…"
@@ -256,11 +257,15 @@ function renderNotes() {
     list.append(empty);
     return;
   }
+  let selectedButton = null;
   for (const note of notes) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "proof-note-item";
-    if (note.id === selectedNoteId) button.classList.add("selected");
+    if (note.id === selectedNoteId) {
+      button.classList.add("selected");
+      selectedButton = button;
+    }
     if (note.used) button.classList.add("used");
     button.title = Number.isInteger(note.draftStart)
       ? "原稿位置の候補あり"
@@ -276,6 +281,15 @@ function renderNotes() {
     button.append(page, text);
     button.onclick = () => selectNote(note.id);
     list.append(button);
+  }
+  list.scrollTop = previousScrollTop;
+  if (selectedButton) {
+    const top = selectedButton.offsetTop;
+    const bottom = top + selectedButton.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTop = bottom - list.clientHeight;
+    }
   }
 }
 

@@ -197,17 +197,83 @@ function cleanOcrText(text) {
   return typeof text === "string" ? text.replace(/[\s|｜]+/gu, "").trim() : "";
 }
 
-function compactCharacters(text) {
-  const characters = [];
-  const rawIndexes = [];
-  let rawIndex = 0;
+function appendNormalizedCharacters(characters, rawIndexes, text, rawStart) {
+  let rawIndex = rawStart;
   for (const character of String(text || "")) {
     if (!/\s/u.test(character)) {
-      characters.push(character);
-      rawIndexes.push(rawIndex);
+      for (const normalized of character.normalize("NFKC")) {
+        characters.push(normalized);
+        rawIndexes.push(rawIndex);
+      }
     }
     rawIndex += character.length;
   }
+}
+
+function compactCharacters(text) {
+  const characters = [];
+  const rawIndexes = [];
+  appendNormalizedCharacters(characters, rawIndexes, text, 0);
+  return { characters, rawIndexes };
+}
+
+function compactManuscriptCharacters(text) {
+  const source = String(text || "");
+  const characters = [];
+  const rawIndexes = [];
+  const tokens =
+    /#fix\[[^\]]*\]|[｜|]([^《\n]+)《[^》\n]+》|([\p{Script=Han}々〆ヵヶ]+)《[^》\n]+》|［＃「([^」]+)」に傍点］|《《([^》]+)》》/gu;
+  let cursor = 0;
+  let match;
+  while ((match = tokens.exec(source))) {
+    appendNormalizedCharacters(
+      characters,
+      rawIndexes,
+      source.slice(cursor, match.index),
+      cursor,
+    );
+    if (match[1] !== undefined) {
+      appendNormalizedCharacters(
+        characters,
+        rawIndexes,
+        match[1],
+        match.index + 1,
+      );
+    } else if (match[2] !== undefined) {
+      appendNormalizedCharacters(characters, rawIndexes, match[2], match.index);
+    } else if (match[3] !== undefined) {
+      const normalizedTarget = [...match[3].normalize("NFKC")];
+      const alreadyPresent =
+        characters.length >= normalizedTarget.length &&
+        characters
+          .slice(-normalizedTarget.length)
+          .every((character, index) => character === normalizedTarget[index]);
+      if (!alreadyPresent) {
+        const targetOffset = match[0].indexOf(match[3]);
+        appendNormalizedCharacters(
+          characters,
+          rawIndexes,
+          match[3],
+          match.index + targetOffset,
+        );
+      }
+    } else if (match[4] !== undefined) {
+      const targetOffset = match[0].indexOf(match[4]);
+      appendNormalizedCharacters(
+        characters,
+        rawIndexes,
+        match[4],
+        match.index + targetOffset,
+      );
+    }
+    cursor = match.index + match[0].length;
+  }
+  appendNormalizedCharacters(
+    characters,
+    rawIndexes,
+    source.slice(cursor),
+    cursor,
+  );
   return { characters, rawIndexes };
 }
 
@@ -289,7 +355,9 @@ function locateSourceRange(
   targetWordIndex = -1,
 ) {
   if (!word?.text) return null;
-  const source = compactCharacters(sourceText);
+  // PDFにはルビ読みや青空文庫記法そのものは出ないため、原稿側だけ
+  // 表示本文へ正規化し、対応した文字の元ファイル上の位置は保持する。
+  const source = compactManuscriptCharacters(sourceText);
   const target = compactCharacters(word.text).characters;
 
   let characterIndex = 0;

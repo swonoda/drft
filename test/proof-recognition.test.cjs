@@ -49,6 +49,43 @@ test("PDFの完全一致文字列から原稿位置を求める", () => {
   );
 });
 
+test("PDF本文を青空文庫記法を除いた原稿位置へ対応させる", () => {
+  const source = "前文。｜流氷《りゅうひょう》の《《向こう》》へ行く。後文。";
+  const target = {
+    text: "流氷の向こうへ行く",
+    left: 0.2,
+    top: 0.1,
+    width: 0.1,
+    height: 0.8,
+  };
+  const range = locateSourceRange(source, target, { x: 0.25, y: 0.45 });
+  assert.ok(range);
+  assert.equal(source.slice(range.draftStart, range.draftEnd), "向");
+  assert.equal(range.matchedText, "向");
+});
+
+test("旧形式の傍点注記もPDF本文から原稿位置へ対応させる", () => {
+  const source = "［＃「重要」に傍点］です。";
+  const range = locateSourceRange(
+    source,
+    { text: "重要です", left: 0, top: 0, width: 1, height: 1 },
+    { x: 0, y: 0 },
+  );
+  assert.ok(range);
+  assert.equal(source.slice(range.draftStart, range.draftEnd), "重");
+});
+
+test("PDFと原稿の互換文字をNFKC正規化して対応させる", () => {
+  assert.deepEqual(
+    locateSourceRange(
+      "前文。ＡＢＣ１２３。後文。",
+      { text: "ABC123", left: 0, top: 0, width: 1, height: 1 },
+      { x: 0.5, y: 0.5 },
+    ),
+    { draftStart: 6, draftEnd: 7, matchedText: "1" },
+  );
+});
+
 test("PDF文字列が原稿中で一意でなければ位置を推測しない", () => {
   assert.equal(
     locateSourceRange(
