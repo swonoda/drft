@@ -195,6 +195,33 @@ function noteForId(id) {
   return notes.find((note) => note.id === id);
 }
 
+function revealEditorRange(start, end = start) {
+  const boundedStart = Math.max(0, Math.min(editor.value.length, start));
+  const boundedEnd = Math.max(boundedStart, Math.min(editor.value.length, end));
+
+  // setSelectionRangeだけでは、Electronが画面外の選択位置までtextareaを
+  // スクロールしないことがある。同じ組版の背面要素で位置を測ってから、
+  // 選択箇所が上から1/3付近へ来るよう明示的に移動する。
+  const anchor = document.createElement("span");
+  anchor.className = "proof-scroll-anchor";
+  anchor.textContent = "\u200b";
+  backdrop.replaceChildren(
+    document.createTextNode(editor.value.slice(0, boundedStart)),
+    anchor,
+    document.createTextNode(editor.value.slice(boundedStart)),
+  );
+  const anchorTop = anchor.offsetTop;
+
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(boundedStart, boundedEnd);
+  const maximum = Math.max(0, editor.scrollHeight - editor.clientHeight);
+  editor.scrollTop = Math.max(
+    0,
+    Math.min(maximum, anchorTop - editor.clientHeight / 3),
+  );
+  renderHighlights();
+}
+
 function selectNote(id) {
   const note = noteForId(id);
   if (!note) return;
@@ -205,8 +232,7 @@ function selectNote(id) {
   renderNoteOverlay();
   if (note.page !== pdfPage) showPdfPage(note.page);
   if (Number.isInteger(note.draftStart) && Number.isInteger(note.draftEnd)) {
-    editor.focus();
-    editor.setSelectionRange(note.draftStart, note.draftEnd);
+    revealEditorRange(note.draftStart, note.draftEnd);
     $("candidateHint").textContent = note.matchedText
       ? `原稿の「${note.matchedText}」付近を選択しました。位置と分類を確認してください`
       : "原稿中の候補位置を選択しました。位置と分類を確認してください";

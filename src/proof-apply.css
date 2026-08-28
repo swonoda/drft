@@ -378,6 +378,7 @@ button:disabled {
 .proof-note-overlay {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
 }
 
@@ -386,14 +387,14 @@ button:disabled {
   min-height: 0;
   border: 2px solid rgb(86 115 201 / 72%);
   border-radius: 4px;
-  background: rgb(207 224 255 / 16%);
+  background: transparent;
   padding: 0;
   pointer-events: auto;
 }
 
 .proof-note-marker.annotation {
   border-style: dashed;
-  background: rgb(207 224 255 / 8%);
+  background: transparent;
 }
 
 .proof-target-marker {
@@ -402,21 +403,31 @@ button:disabled {
   min-height: 8px;
   border: 2px solid rgb(230 129 50 / 82%);
   border-radius: 3px;
-  background: rgb(255 192 94 / 22%);
+  background: transparent;
   padding: 0;
   pointer-events: auto;
 }
 
 .proof-target-marker.selected {
   border-color: #d65d18;
-  background: rgb(255 166 70 / 35%);
+  background: transparent;
   box-shadow: 0 0 0 2px rgb(255 255 255 / 82%);
 }
 
 .proof-note-marker.selected {
   border-color: #4f66bd;
-  background: rgb(137 164 238 / 23%);
+  background: transparent;
   box-shadow: 0 0 0 2px rgb(255 255 255 / 75%);
+}
+
+button.proof-note-marker:hover:not(:disabled),
+button.proof-target-marker:hover:not(:disabled) {
+  background: transparent;
+}
+
+.proof-scroll-anchor {
+  display: inline-block;
+  width: 0;
 }
 
 .proof-note-panel {

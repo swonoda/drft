@@ -229,12 +229,16 @@ function uniqueSequenceIndex(haystack, needle) {
   return found;
 }
 
-function locateSourceRange(sourceText, word, targetPoint) {
+function locateSourceRange(
+  sourceText,
+  word,
+  targetPoint,
+  contextWords = null,
+  targetWordIndex = -1,
+) {
   if (!word?.text) return null;
   const source = compactCharacters(sourceText);
   const target = compactCharacters(word.text).characters;
-  const sequenceStart = uniqueSequenceIndex(source.characters, target);
-  if (sequenceStart < 0) return null;
 
   let characterIndex = 0;
   if (target.length > 1 && targetPoint) {
@@ -248,7 +252,45 @@ function locateSourceRange(sourceText, word, targetPoint) {
       Math.min(target.length - 1, Math.floor(ratio * target.length)),
     );
   }
-  const compactStart = sequenceStart + characterIndex;
+
+  let sequenceStart = -1;
+  let targetOffset = 0;
+  if (
+    Array.isArray(contextWords) &&
+    Number.isInteger(targetWordIndex) &&
+    targetWordIndex >= 0 &&
+    targetWordIndex < contextWords.length
+  ) {
+    // pdftotextは縦書き本文を一文字ずつwordへ分けることがある。
+    // 一文字だけを原稿全体から探すと、偶然一意だった別の文字へ飛び得るため、
+    // PDF上の前後語を連結した十分な長さの文脈で位置を確定する。
+    const maximumRadius = Math.min(12, contextWords.length - 1);
+    for (let radius = 0; radius <= maximumRadius; radius += 1) {
+      const start = Math.max(0, targetWordIndex - radius);
+      const end = Math.min(contextWords.length, targetWordIndex + radius + 1);
+      const parts = contextWords
+        .slice(start, end)
+        .map((candidate) => compactCharacters(candidate?.text).characters);
+      const context = parts.flat();
+      if (context.length < 6) continue;
+      const found = uniqueSequenceIndex(source.characters, context);
+      if (found < 0) continue;
+      sequenceStart = found;
+      targetOffset = parts
+        .slice(0, targetWordIndex - start)
+        .reduce((total, characters) => total + characters.length, 0);
+      break;
+    }
+    if (sequenceStart < 0 && target.length >= 2) {
+      sequenceStart = uniqueSequenceIndex(source.characters, target);
+    }
+    if (sequenceStart < 0) return null;
+  } else {
+    sequenceStart = uniqueSequenceIndex(source.characters, target);
+    if (sequenceStart < 0) return null;
+  }
+
+  const compactStart = sequenceStart + targetOffset + characterIndex;
   const draftStart = source.rawIndexes[compactStart];
   const character = source.characters[compactStart];
   return {
@@ -306,6 +348,8 @@ async function recognizeProofChanges(
           sourceText,
           word,
           location.targetPoint,
+          textPage.words,
+          location.targetWordIndex,
         );
         const number = notes.length + 1;
         notes.push({

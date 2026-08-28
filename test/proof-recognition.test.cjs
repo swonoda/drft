@@ -57,6 +57,35 @@ test("PDF文字列が原稿中で一意でなければ位置を推測しない",
   );
 });
 
+test("一文字単位のPDF文字座標は前後の文脈で原稿位置を求める", () => {
+  const words = [..."前文。対象位置です。後文。"].map((text) => ({
+    text,
+    left: 0,
+    top: 0,
+    width: 0.01,
+    height: 0.01,
+  }));
+  const targetWordIndex = words.findIndex((word) => word.text === "位");
+  assert.deepEqual(
+    locateSourceRange(
+      "位置は違う。前文。対象位置です。後文。位置は二度出る。",
+      words[targetWordIndex],
+      { x: 0, y: 0 },
+      words,
+      targetWordIndex,
+    ),
+    { draftStart: 11, draftEnd: 12, matchedText: "位" },
+  );
+});
+
+test("一文字のPDF座標は文脈が一致しなければ原稿位置を推測しない", () => {
+  const words = [..."PDFだけにある文脈"].map((text) => ({ text }));
+  assert.equal(
+    locateSourceRange("原稿には一文字だけある。", words[0], null, words, 0),
+    null,
+  );
+});
+
 test("赤字のないPDFは本文を推測で変更しない", async () => {
   let locateCalls = 0;
   const result = await recognizeProofChanges(
