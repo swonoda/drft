@@ -371,6 +371,22 @@ function locateSourceRangeFromPage(sourceText, words, targetWordIndex, point) {
   return null;
 }
 
+function sortProofNotesReadingOrder(notes) {
+  return [...notes].sort((left, right) => {
+    if (left.page !== right.page) return left.page - right.page;
+    const leftBounds = left.targetBounds || left.bounds || {};
+    const rightBounds = right.targetBounds || right.bounds || {};
+    const leftX = Number(leftBounds.left) + Number(leftBounds.width || 0) / 2;
+    const rightX =
+      Number(rightBounds.left) + Number(rightBounds.width || 0) / 2;
+    if (Math.abs(leftX - rightX) > 0.025) return rightX - leftX;
+    const leftY = Number(leftBounds.top) + Number(leftBounds.height || 0) / 2;
+    const rightY =
+      Number(rightBounds.top) + Number(rightBounds.height || 0) / 2;
+    return leftY - rightY;
+  });
+}
+
 async function recognizeProofChanges(
   pdfPath,
   sourceText,
@@ -443,6 +459,10 @@ async function recognizeProofChanges(
       pages,
     });
   }
+  notes.splice(0, notes.length, ...sortProofNotesReadingOrder(notes));
+  notes.forEach((note, index) => {
+    note.label = `変更箇所 ${index + 1}`;
+  });
   onProgress?.({ message: "変更箇所の検出が完了しました", percent: 100 });
   const mapped = notes.filter((note) =>
     Number.isInteger(note.draftStart),
@@ -482,5 +502,6 @@ module.exports = {
   recognizeProofChanges,
   redMask,
   removeStraightRuns,
+  sortProofNotesReadingOrder,
   verticalReadingOrder,
 };

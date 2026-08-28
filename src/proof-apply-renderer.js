@@ -272,7 +272,7 @@ function renderNotes() {
     text.className = "text";
     text.textContent = note.matchedText
       ? `${note.label}（「${note.matchedText}」付近）`
-      : note.label;
+      : `${note.label}（原稿位置なし）`;
     button.append(page, text);
     button.onclick = () => selectNote(note.id);
     list.append(button);

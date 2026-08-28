@@ -125,6 +125,10 @@ def normalized_box(box: dict, width: int, height: int) -> dict:
 def target_for_group(group: dict, labels: np.ndarray, words: list[dict], width: int, height: int):
     allowed = np.isin(labels, group["labels"])
     padding = max(6, round(min(width, height) * 0.0045))
+    maximum_distance = max(18, round(min(width, height) * 0.014))
+    red_y, red_x = np.nonzero(allowed)
+    if red_x.size == 0:
+        return None
     best = None
     for index, word in enumerate(words):
         box = pixel_box(word, width, height)
@@ -134,29 +138,44 @@ def target_for_group(group: dict, labels: np.ndarray, words: list[dict], width: 
         bottom = min(height, box["bottom"] + padding + 1)
         ys, xs = np.nonzero(allowed[top:bottom, left:right])
         overlap = int(xs.size)
-        if overlap == 0:
-            continue
         word_area = max(1, (box["right"] - box["left"] + 1) * (box["bottom"] - box["top"] + 1))
-        score = overlap / math.sqrt(word_area)
+        delta_x = np.maximum(np.maximum(box["left"] - red_x, red_x - box["right"]), 0)
+        delta_y = np.maximum(np.maximum(box["top"] - red_y, red_y - box["bottom"]), 0)
+        distances = delta_x * delta_x + delta_y * delta_y
+        nearest_index = int(np.argmin(distances))
+        distance = math.sqrt(float(distances[nearest_index]))
+        if overlap == 0 and distance > maximum_distance:
+            continue
+        score = overlap / math.sqrt(word_area) if overlap else -distance
+        point_x = float(np.median(xs + left)) if overlap else float(red_x[nearest_index])
+        point_y = float(np.median(ys + top)) if overlap else float(red_y[nearest_index])
         candidate = {
             "index": index,
             "box": box,
             "overlap": overlap,
+            "distance": distance,
             "score": score,
             "point": {
-                "x": float(np.median(xs + left) / width),
-                "y": float(np.median(ys + top) / height),
+                "x": point_x / width,
+                "y": point_y / height,
             },
         }
-        if best is None or (candidate["score"], candidate["overlap"]) > (
+        candidate_rank = (candidate["overlap"] > 0, candidate["score"], candidate["overlap"])
+        best_rank = (
+            best["overlap"] > 0,
             best["score"],
             best["overlap"],
-        ):
+        ) if best else None
+        if best is None or candidate_rank > best_rank:
             best = candidate
     if best is None:
         return None
     best["bounds"] = normalized_box(best.pop("box"), width, height)
-    best["confidence"] = min(100, round(45 + best["overlap"] * 2.5))
+    best["confidence"] = (
+        min(100, round(45 + best["overlap"] * 2.5))
+        if best["overlap"]
+        else max(20, round(55 - best["distance"]))
+    )
     return best
 
 
@@ -183,7 +202,6 @@ def locate(image_path: Path, request: dict) -> dict:
                 "confidence": target["confidence"] if target else 0,
             }
         )
-    locations.sort(key=lambda item: (item["bounds"]["top"], item["bounds"]["left"]))
     return {"redPixels": int(np.count_nonzero(mask)), "locations": locations}
 
 

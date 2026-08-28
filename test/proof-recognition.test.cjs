@@ -6,6 +6,7 @@ const {
   locateSourceRangeFromPage,
   recognizeProofChanges,
   redMask,
+  sortProofNotesReadingOrder,
   verticalReadingOrder,
 } = require("../src/proof-recognition.cjs");
 
@@ -117,6 +118,19 @@ test("PDF配列順が違っても縦書き座標順の文脈から原稿位置�
   assert.deepEqual(
     locateSourceRangeFromPage("前。あいうかきく。後。", words, 3, null),
     { draftStart: 6, draftEnd: 7, matchedText: "き" },
+  );
+});
+
+test("変更箇所をページ順、右列から左列、同じ列では上から下へ並べる", () => {
+  const notes = [
+    { id: "left", page: 1, bounds: { left: 0.2, top: 0.2 } },
+    { id: "right-bottom", page: 1, bounds: { left: 0.8, top: 0.7 } },
+    { id: "next-page", page: 2, bounds: { left: 0.9, top: 0.1 } },
+    { id: "right-top", page: 1, bounds: { left: 0.81, top: 0.1 } },
+  ];
+  assert.deepEqual(
+    sortProofNotesReadingOrder(notes).map((note) => note.id),
+    ["right-top", "right-bottom", "left", "next-page"],
   );
 });
 
