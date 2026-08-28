@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const editor = $("workingEditor");
 const backdrop = $("highlightBackdrop");
+const noteBackdrop = $("noteBackdrop");
 let state;
 let changes = [];
 let notes = [];
@@ -59,6 +60,49 @@ function appendHighlight(change, start, end) {
   backdrop.append(span);
 }
 
+function punctuationRangeAt(text, start, end = start) {
+  const value = String(text || "");
+  const boundary = /[、。！？!?\n]/u;
+  const closer = /[」』）】》〉]/u;
+  let rangeStart = Math.max(0, Math.min(value.length, start));
+  let rangeEnd = Math.max(rangeStart, Math.min(value.length, end));
+  while (rangeStart > 0 && !boundary.test(value[rangeStart - 1])) {
+    rangeStart -= 1;
+  }
+  while (rangeEnd < value.length && !boundary.test(value[rangeEnd])) {
+    rangeEnd += 1;
+  }
+  if (rangeEnd < value.length) rangeEnd += 1;
+  while (rangeEnd < value.length && closer.test(value[rangeEnd])) {
+    rangeEnd += 1;
+  }
+  return { start: rangeStart, end: rangeEnd };
+}
+
+function renderNoteHighlight() {
+  noteBackdrop.replaceChildren();
+  const note = noteForId(selectedNoteId);
+  if (!Number.isInteger(note?.draftStart)) {
+    noteBackdrop.textContent = editor.value;
+  } else {
+    const range = punctuationRangeAt(
+      editor.value,
+      note.draftStart,
+      note.draftEnd,
+    );
+    const span = document.createElement("span");
+    span.className = "proof-note-range";
+    span.textContent = editor.value.slice(range.start, range.end) || "\u200b";
+    noteBackdrop.append(
+      document.createTextNode(editor.value.slice(0, range.start)),
+      span,
+      document.createTextNode(editor.value.slice(range.end)),
+    );
+  }
+  noteBackdrop.scrollTop = editor.scrollTop;
+  noteBackdrop.scrollLeft = editor.scrollLeft;
+}
+
 function renderHighlights() {
   backdrop.replaceChildren();
   let cursor = 0;
@@ -78,6 +122,7 @@ function renderHighlights() {
   backdrop.append(document.createTextNode(editor.value.slice(cursor)));
   backdrop.scrollTop = editor.scrollTop;
   backdrop.scrollLeft = editor.scrollLeft;
+  renderNoteHighlight();
   updateToolbar();
 }
 
@@ -144,6 +189,8 @@ editor.addEventListener("input", () => {
 editor.addEventListener("scroll", () => {
   backdrop.scrollTop = editor.scrollTop;
   backdrop.scrollLeft = editor.scrollLeft;
+  noteBackdrop.scrollTop = editor.scrollTop;
+  noteBackdrop.scrollLeft = editor.scrollLeft;
 });
 editor.addEventListener("click", () => {
   const caret = editor.selectionStart;
@@ -222,7 +269,39 @@ function revealEditorRange(start, end = start) {
   renderHighlights();
 }
 
-function selectNote(id) {
+function noteDisplayBounds(note) {
+  const boxes = [note?.bounds, note?.targetBounds].filter(Boolean);
+  if (!boxes.length) return null;
+  const left = Math.min(...boxes.map((box) => Number(box.left) || 0));
+  const top = Math.min(...boxes.map((box) => Number(box.top) || 0));
+  const right = Math.max(
+    ...boxes.map((box) => (Number(box.left) || 0) + (Number(box.width) || 0)),
+  );
+  const bottom = Math.max(
+    ...boxes.map((box) => (Number(box.top) || 0) + (Number(box.height) || 0)),
+  );
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function revealPdfNote(note) {
+  if (!note || note.page !== pdfPage) return;
+  const bounds = noteDisplayBounds(note);
+  const canvas = $("proofPdfCanvas");
+  const viewport = $("proofPdfViewport");
+  if (!bounds || canvas.hidden || !canvas.clientWidth || !canvas.clientHeight)
+    return;
+  const centerX =
+    canvas.offsetLeft + (bounds.left + bounds.width / 2) * canvas.clientWidth;
+  const centerY =
+    canvas.offsetTop + (bounds.top + bounds.height / 2) * canvas.clientHeight;
+  viewport.scrollTo({
+    left: Math.max(0, centerX - viewport.clientWidth / 2),
+    top: Math.max(0, centerY - viewport.clientHeight / 2),
+    behavior: "smooth",
+  });
+}
+
+async function selectNote(id) {
   const note = noteForId(id);
   if (!note) return;
   selectedNoteId = id;
@@ -230,7 +309,9 @@ function selectNote(id) {
   updateCandidateControls();
   renderNotes();
   renderNoteOverlay();
-  if (note.page !== pdfPage) showPdfPage(note.page);
+  if (note.page !== pdfPage) await showPdfPage(note.page);
+  else renderNoteOverlay();
+  revealPdfNote(note);
   if (Number.isInteger(note.draftStart) && Number.isInteger(note.draftEnd)) {
     revealEditorRange(note.draftStart, note.draftEnd);
     $("candidateHint").textContent = note.matchedText
@@ -284,7 +365,10 @@ function renderNotes() {
   }
   list.scrollTop = previousScrollTop;
   if (selectedButton) {
-    const top = selectedButton.offsetTop;
+    const top =
+      selectedButton.getBoundingClientRect().top -
+      list.getBoundingClientRect().top +
+      list.scrollTop;
     const bottom = top + selectedButton.offsetHeight;
     if (top < list.scrollTop) list.scrollTop = top;
     else if (bottom > list.scrollTop + list.clientHeight) {
@@ -392,10 +476,12 @@ $("nextPdfPage").onclick = () => showPdfPage(pdfPage + 1);
 $("zoomOutPdf").onclick = () => {
   pdfZoom = Math.max(0.6, Math.round((pdfZoom - 0.2) * 10) / 10);
   updatePdfToolbar();
+  requestAnimationFrame(() => revealPdfNote(noteForId(selectedNoteId)));
 };
 $("zoomInPdf").onclick = () => {
   pdfZoom = Math.min(2.4, Math.round((pdfZoom + 0.2) * 10) / 10);
   updatePdfToolbar();
+  requestAnimationFrame(() => revealPdfNote(noteForId(selectedNoteId)));
 };
 
 function updateCandidateControls() {
