@@ -211,6 +211,7 @@ button:disabled {
 
 #applyCandidate {
   flex: 0 0 auto;
+  margin-left: auto;
   width: 38px;
   min-width: 38px;
   min-height: 32px;
