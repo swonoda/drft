@@ -238,6 +238,215 @@ def body_mark_target(
     return best
 
 
+def point_box(x: int, y: int, size: int, width: int, height: int) -> dict:
+    half = max(2, size // 2)
+    return {
+        "left": max(0, x - half),
+        "top": max(0, y - half),
+        "right": min(width - 1, x + half),
+        "bottom": min(height - 1, y + half),
+    }
+
+
+def body_mark_locations(
+    labels: np.ndarray,
+    stats: np.ndarray,
+    words: list[dict],
+    width: int,
+    height: int,
+    image: np.ndarray,
+) -> list[dict]:
+    """本文へ触れた赤成分ごとに、読み順の先頭位置だけを返す。"""
+    word_candidates = []
+    for index, word in enumerate(words):
+        box = pixel_box(word, width, height)
+        if dark_pixel_count(image, box) < 2:
+            continue
+        thickness = max(
+            1,
+            min(box["right"] - box["left"] + 1, box["bottom"] - box["top"] + 1),
+        )
+        word_candidates.append((index, box, thickness))
+    if not word_candidates:
+        return []
+
+    typical_thickness = float(
+        np.median([candidate[2] for candidate in word_candidates])
+    )
+    contacts_by_label: dict[int, list[dict]] = {}
+    for index, box, thickness in word_candidates:
+        margin = max(2, round(max(thickness, typical_thickness) * 0.18))
+        left = max(0, box["left"] - margin)
+        top = max(0, box["top"] - margin)
+        right = min(width - 1, box["right"] + margin)
+        bottom = min(height - 1, box["bottom"] + margin)
+        label_crop = labels[top : bottom + 1, left : right + 1]
+        for label in np.unique(label_crop):
+            label = int(label)
+            if label <= 0 or int(stats[label, cv2.CC_STAT_AREA]) < 3:
+                continue
+            component_width = int(stats[label, cv2.CC_STAT_WIDTH])
+            component_height = int(stats[label, cv2.CC_STAT_HEIGHT])
+            long_span = max(component_width, component_height)
+            short_span = max(1, min(component_width, component_height))
+            line_like = (
+                long_span >= typical_thickness * 0.55
+                and (
+                    long_span / short_span >= 1.7
+                    or int(stats[label, cv2.CC_STAT_AREA])
+                    >= typical_thickness * typical_thickness * 0.5
+                )
+            )
+            if not line_like:
+                continue
+            local_y, local_x = np.nonzero(label_crop == label)
+            contact_x = local_x + left
+            contact_y = local_y + top
+            distances = np.array(
+                [
+                    distance_to_box(int(x), int(y), box)
+                    for x, y in zip(contact_x, contact_y)
+                ]
+            )
+            minimum_distance = float(np.min(distances))
+            if minimum_distance > margin:
+                continue
+            closest = distances <= minimum_distance + 1.5
+            point_x, point_y = first_contact_point(
+                contact_x[closest], contact_y[closest], box
+            )
+            center_x = (box["left"] + box["right"]) / 2
+            center_y = (box["top"] + box["bottom"]) / 2
+            vertical = (box["bottom"] - box["top"]) > (
+                box["right"] - box["left"]
+            ) * 1.35
+            contacts_by_label.setdefault(label, []).append(
+                {
+                    "index": index,
+                    "box": box,
+                    "thickness": thickness,
+                    "distance": minimum_distance,
+                    "point": (point_x, point_y),
+                    "readingOrder": (
+                        (-center_x, center_y)
+                        if vertical
+                        else (center_y, center_x)
+                    ),
+                }
+            )
+
+    contact_labels = list(contacts_by_label)
+    parent = {label: label for label in contact_labels}
+
+    def find(label: int) -> int:
+        while parent[label] != label:
+            parent[label] = parent[parent[label]]
+            label = parent[label]
+        return label
+
+    def union(first: int, second: int) -> None:
+        first_root = find(first)
+        second_root = find(second)
+        if first_root != second_root:
+            parent[second_root] = first_root
+
+    merge_gap = max(3, round(typical_thickness * 0.25))
+    for first_index, first_label in enumerate(contact_labels):
+        first_box = {
+            "left": int(stats[first_label, cv2.CC_STAT_LEFT]),
+            "top": int(stats[first_label, cv2.CC_STAT_TOP]),
+            "right": int(stats[first_label, cv2.CC_STAT_LEFT])
+            + int(stats[first_label, cv2.CC_STAT_WIDTH])
+            - 1,
+            "bottom": int(stats[first_label, cv2.CC_STAT_TOP])
+            + int(stats[first_label, cv2.CC_STAT_HEIGHT])
+            - 1,
+        }
+        for second_label in contact_labels[first_index + 1 :]:
+            second_box = {
+                "left": int(stats[second_label, cv2.CC_STAT_LEFT]),
+                "top": int(stats[second_label, cv2.CC_STAT_TOP]),
+                "right": int(stats[second_label, cv2.CC_STAT_LEFT])
+                + int(stats[second_label, cv2.CC_STAT_WIDTH])
+                - 1,
+                "bottom": int(stats[second_label, cv2.CC_STAT_TOP])
+                + int(stats[second_label, cv2.CC_STAT_HEIGHT])
+                - 1,
+            }
+            x_gap, y_gap = gap(first_box, second_box)
+            if x_gap <= merge_gap and y_gap <= merge_gap:
+                union(first_label, second_label)
+
+    contact_groups: dict[int, dict] = {}
+    for label, contacts in contacts_by_label.items():
+        root = find(label)
+        group = contact_groups.setdefault(root, {"labels": [], "contacts": []})
+        group["labels"].append(label)
+        group["contacts"].extend(contacts)
+
+    locations = []
+    for group in contact_groups.values():
+        contacts = group["contacts"]
+        # 同じ赤線が複数文字へ触れても、本文の読み順で最初の一箇所だけにする。
+        minimum_distance = min(contact["distance"] for contact in contacts)
+        comparable = [
+            contact
+            for contact in contacts
+            if contact["distance"] <= minimum_distance + 2.0
+        ]
+        first = min(comparable, key=lambda contact: contact["readingOrder"])
+        point_x, point_y = first["point"]
+        marker_size = max(8, round(max(first["thickness"], typical_thickness)))
+        marker = point_box(point_x, point_y, marker_size, width, height)
+        locations.append(
+            {
+                "bounds": None,
+                "pixels": sum(
+                    int(stats[label, cv2.CC_STAT_AREA]) for label in group["labels"]
+                ),
+                "targetWordIndex": first["index"],
+                "targetBounds": normalized_box(marker, width, height),
+                "targetPoint": {
+                    "x": point_x / width,
+                    "y": point_y / height,
+                },
+                "confidence": max(
+                    70,
+                    min(
+                        98,
+                        round(
+                            98
+                            - (minimum_distance / max(1, typical_thickness)) * 28
+                        ),
+                    ),
+                ),
+                "targetMethod": "body-start",
+                "readingOrder": first["readingOrder"],
+            }
+        )
+
+    locations.sort(key=lambda location: location["readingOrder"])
+    deduplicated = []
+    minimum_gap = max(6, typical_thickness * 0.8)
+    for location in locations:
+        point = location["targetPoint"]
+        point_x = point["x"] * width
+        point_y = point["y"] * height
+        duplicate = False
+        for existing in deduplicated:
+            other = existing["targetPoint"]
+            if math.hypot(
+                point_x - other["x"] * width,
+                point_y - other["y"] * height,
+            ) <= minimum_gap:
+                duplicate = True
+                break
+        if not duplicate:
+            location.pop("readingOrder", None)
+            deduplicated.append(location)
+    return deduplicated
+
+
 def target_for_group(
     group: dict,
     labels: np.ndarray,
@@ -389,6 +598,21 @@ def locate(image_path: Path, request: dict) -> dict:
     del count
     height, width = image.shape[:2]
     words = request.get("words") or []
+    body_locations = body_mark_locations(
+        labels,
+        stats,
+        words,
+        width,
+        height,
+        image,
+    )
+    if words:
+        return {
+            "redPixels": int(np.count_nonzero(mask)),
+            "locations": body_locations,
+        }
+
+    # 文字座標がないPDFだけは、従来どおり赤字のまとまりを表示する。
     groups = group_components(labels, stats, image.shape)
     locations = []
     for group in groups:

@@ -498,12 +498,15 @@ async function recognizeProofChanges(
       if (!textPage.words?.length) pagesWithoutText += 1;
       const located = await locatePage(png, { words: textPage.words || [] });
       for (const location of located.locations || []) {
-        const sourceRange = locateSourceRangeFromPage(
-          sourceText,
-          textPage.words,
-          location.targetWordIndex,
-          location.targetPoint,
-        );
+        const sourceRange =
+          location.targetMethod === "body-start"
+            ? null
+            : locateSourceRangeFromPage(
+                sourceText,
+                textPage.words,
+                location.targetWordIndex,
+                location.targetPoint,
+              );
         const number = notes.length + 1;
         notes.push({
           id: `location-${page}-${number}`,
@@ -514,6 +517,7 @@ async function recognizeProofChanges(
           targetBounds: location.targetBounds,
           targetPoint: location.targetPoint,
           confidence: Number(location.confidence) || 0,
+          targetMethod: location.targetMethod || "",
           draftStart: sourceRange?.draftStart ?? null,
           draftEnd: sourceRange?.draftEnd ?? null,
           matchedText: sourceRange?.matchedText || "",
@@ -532,9 +536,6 @@ async function recognizeProofChanges(
     note.label = `変更箇所 ${index + 1}`;
   });
   onProgress?.({ message: "変更箇所の検出が完了しました", percent: 100 });
-  const mapped = notes.filter((note) =>
-    Number.isInteger(note.draftStart),
-  ).length;
   let notice;
   if (!redPages) {
     notice =
@@ -543,14 +544,11 @@ async function recognizeProofChanges(
     notice =
       "赤字は見つかりましたが、変更箇所として分けられませんでした。本文は変更していません。";
   } else {
-    notice = `変更箇所を${notes.length}件検出しました。${mapped}件は原稿中の候補位置まで特定できました。赤字の内容は手入力して確認してください。`;
+    notice = `本文上の赤字開始位置を${notes.length}件検出しました。赤字の内容は手入力して確認してください。`;
     if (pagesWithoutText) {
       notice += textExtractionErrors
         ? " PDFの文字情報を読み出せないページは原稿位置を自動選択できません。PDF変換環境を確認してください。"
         : " PDFに文字情報がないページは原稿位置を自動選択できません。画像化された本文から位置を得るには印刷本文のOCRが必要です。";
-    } else if (!mapped) {
-      notice +=
-        " PDF本文と原稿の文脈が一致せず、原稿位置は自動選択していません。";
     }
   }
   return {

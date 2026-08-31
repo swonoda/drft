@@ -404,9 +404,7 @@ function renderNotes() {
     page.textContent = `${note.page}p`;
     const text = document.createElement("span");
     text.className = "text";
-    text.textContent = note.matchedText
-      ? `${note.label}（「${note.matchedText}」付近）`
-      : `${note.label}（原稿位置なし）`;
+    text.textContent = note.label;
     button.append(page, text);
     button.onclick = () => selectNote(note.id);
     list.append(button);
@@ -429,19 +427,23 @@ function renderNoteOverlay() {
   const overlay = $("proofNoteOverlay");
   overlay.replaceChildren();
   for (const note of notes.filter(
-    (candidate) => candidate.page === pdfPage && candidate.bounds,
+    (candidate) =>
+      candidate.page === pdfPage &&
+      (candidate.bounds || candidate.targetBounds),
   )) {
-    const marker = document.createElement("button");
-    marker.type = "button";
-    marker.className = "proof-note-marker annotation";
-    if (note.id === selectedNoteId) marker.classList.add("selected");
-    marker.style.left = `${note.bounds.left * 100}%`;
-    marker.style.top = `${note.bounds.top * 100}%`;
-    marker.style.width = `${note.bounds.width * 100}%`;
-    marker.style.height = `${note.bounds.height * 100}%`;
-    marker.title = note.label;
-    marker.onclick = () => selectNote(note.id);
-    overlay.append(marker);
+    if (note.bounds) {
+      const marker = document.createElement("button");
+      marker.type = "button";
+      marker.className = "proof-note-marker annotation";
+      if (note.id === selectedNoteId) marker.classList.add("selected");
+      marker.style.left = `${note.bounds.left * 100}%`;
+      marker.style.top = `${note.bounds.top * 100}%`;
+      marker.style.width = `${note.bounds.width * 100}%`;
+      marker.style.height = `${note.bounds.height * 100}%`;
+      marker.title = note.label;
+      marker.onclick = () => selectNote(note.id);
+      overlay.append(marker);
+    }
     if (note.targetBounds) {
       const target = document.createElement("button");
       target.type = "button";

@@ -225,6 +225,38 @@ test("OpenCVの変更箇所とPDF文字位置を原稿候補として返す", as
   assert.match(result.notice, /1件/);
 });
 
+test("本文上の赤字開始位置は文字列一致なしで一覧へ残す", async () => {
+  const word = {
+    text: "原稿",
+    left: 0.4,
+    top: 0.2,
+    width: 0.05,
+    height: 0.2,
+  };
+  const result = await recognizeProofChanges("赤ゲラ.pdf", "これは原稿です", {
+    countPages: async () => 1,
+    renderPage: async () => imageWithPixel({ red: true }),
+    extractTextPage: async () => ({ words: [word] }),
+    locatePage: async () => ({
+      locations: [
+        {
+          bounds: null,
+          targetBounds: word,
+          targetPoint: { x: 0.42, y: 0.25 },
+          targetWordIndex: 0,
+          targetMethod: "body-start",
+          confidence: 90,
+        },
+      ],
+    }),
+  });
+
+  assert.equal(result.notes.length, 1);
+  assert.equal(result.notes[0].draftStart, null);
+  assert.equal(result.notes[0].targetMethod, "body-start");
+  assert.match(result.notice, /赤字開始位置を1件/);
+});
+
 test("OpenCVは赤字ページでだけ起動し、文字認識結果を作らない", async () => {
   let locateCalls = 0;
   const result = await recognizeProofChanges("赤ゲラ.pdf", "元原稿", {
