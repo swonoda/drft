@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>ゲラを原稿に反映 — DRFT</title>
+    <link rel="stylesheet" href="proof-apply.css" />
+  </head>
+  <body>
+    <header class="proof-header">
+      <div>
+        <h1>ゲラを原稿に反映</h1>
+        <p id="sourceState"></p>
+      </div>
+      <div class="proof-header-actions">
+        <button id="discardButton" class="secondary" type="button">
+          破棄して閉じる
+        </button>
+        <button id="commitButton" class="primary" type="button">
+          反映して閉じる
+        </button>
+      </div>
+    </header>
+
+    <div id="notice" class="proof-notice" hidden>
+      <div class="proof-notice-content">
+        <span id="noticeText"></span>
+        <div id="progressRow" class="proof-progress" hidden>
+          <progress id="recognitionProgress" max="100" value="0"></progress>
+          <span id="progressPercent">0%</span>
+        </div>
+      </div>
+      <button id="recognizeButton" class="secondary compact" type="button">
+        変更箇所を再検出
+      </button>
+    </div>
+
+    <main class="proof-workspace">
+      <section class="proof-manuscript-pane" aria-label="仮反映原稿">
+        <div class="proof-toolbar">
+          <button id="previousChange" type="button" aria-label="前の検出箇所">
+            ‹
+          </button>
+          <span id="changeState">0 / 0</span>
+          <button id="nextChange" type="button" aria-label="次の検出箇所">
+            ›
+          </button>
+          <input
+            id="candidateText"
+            type="text"
+            autocomplete="off"
+            aria-label="赤字の内容"
+            placeholder="赤字の内容"
+          />
+          <button
+            id="applyCandidate"
+            class="secondary"
+            type="button"
+            title="選択位置へ反映"
+            aria-label="選択位置へ反映"
+          >
+            ✓
+          </button>
+        </div>
+        <div class="proof-editor-shell">
+          <pre id="noteBackdrop" aria-hidden="true"></pre>
+          <pre id="highlightBackdrop" aria-hidden="true"></pre>
+          <textarea
+            id="workingEditor"
+            spellcheck="false"
+            aria-label="ゲラを仮反映した原稿"
+          ></textarea>
+        </div>
+      </section>
+
+      <section class="proof-pdf-pane" aria-label="赤ゲラPDF">
+        <div class="proof-pdf-head">
+          <div class="proof-pdf-title">
+            <strong id="pdfName">赤ゲラPDF</strong>
+            <span id="pdfStatus">表示準備中（Canvas v3）</span>
+          </div>
+          <div class="proof-pdf-controls">
+            <button id="nextPdfPage" type="button" aria-label="次のページ">
+              ‹
+            </button>
+            <span id="pdfPageState">1 / 1</span>
+            <button id="previousPdfPage" type="button" aria-label="前のページ">
+              ›
+            </button>
+            <button id="zoomOutPdf" type="button" aria-label="縮小">−</button>
+            <span id="pdfZoomState">100%</span>
+            <button id="zoomInPdf" type="button" aria-label="拡大">＋</button>
+          </div>
+        </div>
+        <div id="proofPdfViewport" class="proof-pdf-viewport">
+          <div id="pdfLoading" class="proof-pdf-message">PDFを読み込み中…</div>
+          <div id="proofPdfCanvas" class="proof-pdf-canvas">
+            <canvas id="proofPdfPage" aria-label="赤ゲラPDFのページ"></canvas>
+            <div id="proofNoteOverlay" class="proof-note-overlay"></div>
+          </div>
+        </div>
+        <div class="proof-note-panel">
+          <div class="proof-note-panel-head">
+            <strong>検出した変更箇所</strong>
+            <span id="noteState">検出中…</span>
+          </div>
+          <div id="noteList" class="proof-note-list"></div>
+        </div>
+      </section>
+    </main>
+
+    <script src="proof-apply-renderer.js"></script>
+  </body>
+</html>

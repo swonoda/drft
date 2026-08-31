@@ -8,6 +8,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test",
+    "proof:setup": "node scripts/setup-ocr.cjs",
+    "ocr:setup": "npm run proof:setup",
     "dist:win": "electron-builder --win nsis portable"
   },
   "devDependencies": {
@@ -25,6 +27,9 @@
       "build/favicon.png",
       "LICENSE",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/node-poppler-win32/**/*"
     ],
     "win": {
       "icon": "build/icon.ico",
@@ -46,7 +51,8 @@
     "iconv-lite": "^0.7.3",
     "jszip": "^3.10.1",
     "node-poppler": "^10.0.1",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "pngjs": "^7.0.0"
   },
   "optionalDependencies": {
     "node-poppler-win32": "^1.0.2"

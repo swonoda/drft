@@ -24,8 +24,11 @@ Node.js 22.12以降とnpmが必要です。
 git clone https://github.com/swonoda/drft.git
 cd drft
 npm install
+npm run proof:setup
 npm start
 ```
+
+`npm run proof:setup` は赤ゲラPDFの赤い書き込みと変更箇所を検出するOpenCVを、DRFT専用の環境へ準備します。初回のみ実行してください。OCRによる文字認識は行わず、赤字の内容は画面で手入力します。文書画像は外部サービスへ送信しません。以前の `npm run ocr:setup` も同じ準備コマンドとして利用できます。
 
 ソースコードからの起動はmacOSでも可能です。配布パッケージは現在Windows版のみ用意しています。
 
@@ -56,6 +59,7 @@ npm test
 - スナップショット機能
 - 2つのテキストファイルの差分を確認する差分ビュー
 - 差分ビューから校正原稿を自動作成・PDFへ出力
+- 赤ゲラPDFを横に表示し、仮反映した原稿を確認してから本原稿へ反映するレビュー画面（試作）
 - 縦書きPDF/EPUBの出力
 
 操作方法と記法の詳細は[ユーザーマニュアル](docs/manual.md)を参照してください。
@@ -63,4 +67,3 @@ npm test
 ## License
 
 DRFTは[MIT License](LICENSE)で公開されています。
-

@@ -77,9 +77,35 @@ function createDiffWindow(appIcon) {
   return window;
 }
 
+function createProofApplyWindow(parent, appIcon) {
+  const window = new BrowserWindow({
+    width: 1500,
+    height: 900,
+    minWidth: 980,
+    minHeight: 640,
+    parent,
+    modal: true,
+    show: false,
+    title: "ゲラを原稿に反映 — DRFT",
+    icon: appIcon,
+    backgroundColor: "#fdfdff",
+    webPreferences: {
+      preload: path.join(__dirname, "proof-apply-preload.cjs"),
+      contextIsolation: true,
+      // The preload imports the local proof range engine; Electron's sandboxed
+      // preload only permits a limited built-in require implementation.
+      sandbox: false,
+    },
+  });
+  window.setMenu(null);
+  window.loadFile(path.join(__dirname, "proof-apply.html"));
+  return window;
+}
+
 module.exports = {
   createMainWindow,
   createSplashWindow,
   createDictionaryWindow,
   createDiffWindow,
+  createProofApplyWindow,
 };

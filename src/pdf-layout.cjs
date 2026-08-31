@@ -4,24 +4,25 @@ const path = require("node:path");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const { PDFDocument } = require("pdf-lib");
+const { unpackedAsarPath } = require("./packaged-path.cjs");
 
 const execFileAsync = promisify(execFile);
 
-async function resolvePdfToPpm() {
-  let npmPdftoppm = null;
+async function resolvePopplerTool(tool, environmentVariable) {
+  let npmTool = null;
 
   if (process.platform === "win32") {
     try {
       const popplerDir = require("node-poppler-win32");
-      npmPdftoppm = path.join(popplerDir, "pdftoppm.exe");
+      npmTool = unpackedAsarPath(path.join(popplerDir, `${tool}.exe`));
     } catch (error) {
       console.warn("node-poppler-win32の読み込みに失敗しました:", error);
     }
   }
 
   const candidates = [
-    process.env.PDFTOPPM,
-    npmPdftoppm,
+    process.env[environmentVariable],
+    npmTool,
 
     path.join(
       os.homedir(),
@@ -31,12 +32,12 @@ async function resolvePdfToPpm() {
       "dependencies",
       "bin",
       "override",
-      process.platform === "win32" ? "pdftoppm.cmd" : "pdftoppm",
+      process.platform === "win32" ? `${tool}.cmd` : tool,
     ),
-    "pdftoppm",
+    tool,
   ].filter(Boolean);
   for (const candidate of candidates) {
-    if (candidate === "pdftoppm") {
+    if (candidate === tool) {
       try {
         await execFileAsync(
           process.platform === "win32" ? "where.exe" : "which",
@@ -50,12 +51,24 @@ async function resolvePdfToPpm() {
     }
     try {
       await fs.access(candidate);
-      return candidate;
+      return unpackedAsarPath(candidate);
     } catch {
       /* try next candidate */
     }
   }
-  throw new Error("PDFを画像化するためのpdftoppmが見つかりません。");
+  throw new Error(`PDFを処理するための${tool}が見つかりません。`);
+}
+
+async function resolvePdfToPpm() {
+  return resolvePopplerTool("pdftoppm", "PDFTOPPM");
+}
+
+async function resolvePdfToCairo() {
+  return resolvePopplerTool("pdftocairo", "PDFTOCAIRO");
+}
+
+async function resolvePdfToText() {
+  return resolvePopplerTool("pdftotext", "PDFTOTEXT");
 }
 const PDF_LAYOUT_ERROR = "PDFから本文領域を検出できませんでした。";
 
@@ -85,6 +98,127 @@ async function renderPage(pdfPath) {
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+}
+
+async function pdfPageCount(pdfPath) {
+  const pdf = await PDFDocument.load(await fs.readFile(pdfPath));
+  return pdf.getPageCount();
+}
+
+async function renderPdfPagePng(pdfPath, pageNumber, dpi = 140) {
+  const page = Number(pageNumber);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new RangeError("PDFのページ番号が不正です。");
+  }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "drft-proof-page-"));
+  const prefix = path.join(dir, "page");
+  try {
+    let command;
+    let useCairo = false;
+    try {
+      command = await resolvePdfToCairo();
+      useCairo = true;
+    } catch {
+      command = await resolvePdfToPpm();
+    }
+    const argumentsBeforePath = useCairo ? ["-png"] : [];
+    const argumentsAfterPage = useCairo ? [] : ["-png"];
+    await execFileAsync(
+      command,
+      [
+        ...argumentsBeforePath,
+        "-f",
+        String(page),
+        "-l",
+        String(page),
+        "-singlefile",
+        "-r",
+        String(dpi),
+        ...argumentsAfterPage,
+        pdfPath,
+        prefix,
+      ],
+      { windowsHide: true, shell: command.endsWith(".cmd") },
+    );
+    const png = await fs.readFile(`${prefix}.png`);
+    png.renderer = useCairo ? "pdftocairo" : "pdftoppm";
+    return png;
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+function decodeXmlText(value) {
+  return value
+    .replace(/&#x([0-9a-f]+);/giu, (_, code) =>
+      String.fromCodePoint(Number.parseInt(code, 16)),
+    )
+    .replace(/&#([0-9]+);/gu, (_, code) =>
+      String.fromCodePoint(Number.parseInt(code, 10)),
+    )
+    .replace(/&lt;/gu, "<")
+    .replace(/&gt;/gu, ">")
+    .replace(/&quot;/gu, '"')
+    .replace(/&apos;/gu, "'")
+    .replace(/&amp;/gu, "&");
+}
+
+function parsePdfTextBoxes(xhtml) {
+  const pageMatch = String(xhtml).match(
+    /<page\b[^>]*\bwidth="([\d.]+)"[^>]*\bheight="([\d.]+)"[^>]*>/iu,
+  );
+  if (!pageMatch) return { width: 0, height: 0, words: [] };
+  const width = Number(pageMatch[1]);
+  const height = Number(pageMatch[2]);
+  const words = [];
+  const wordPattern =
+    /<word\b[^>]*\bxMin="([\d.-]+)"[^>]*\byMin="([\d.-]+)"[^>]*\bxMax="([\d.-]+)"[^>]*\byMax="([\d.-]+)"[^>]*>([\s\S]*?)<\/word>/giu;
+  for (const match of String(xhtml).matchAll(wordPattern)) {
+    const text = decodeXmlText(match[5].replace(/<[^>]+>/gu, "")).trim();
+    if (!text) continue;
+    const left = Number(match[1]);
+    const top = Number(match[2]);
+    const right = Number(match[3]);
+    const bottom = Number(match[4]);
+    if (![left, top, right, bottom].every(Number.isFinite)) continue;
+    words.push({
+      text,
+      left: left / width,
+      top: top / height,
+      width: (right - left) / width,
+      height: (bottom - top) / height,
+    });
+  }
+  return { width, height, words };
+}
+
+async function extractPdfTextPage(pdfPath, pageNumber) {
+  const page = Number(pageNumber);
+  if (!Number.isInteger(page) || page < 1) {
+    throw new RangeError("PDFのページ番号が不正です。");
+  }
+  const command = await resolvePdfToText();
+  const { stdout } = await execFileAsync(
+    command,
+    [
+      "-f",
+      String(page),
+      "-l",
+      String(page),
+      "-bbox-layout",
+      "-enc",
+      "UTF-8",
+      pdfPath,
+      "-",
+    ],
+    {
+      encoding: "utf8",
+      maxBuffer: 20 * 1024 * 1024,
+      windowsHide: true,
+      shell: command.endsWith(".cmd"),
+    },
+  );
+  return parsePdfTextBoxes(stdout);
 }
 
 async function firstPageBoxes(pdfPath) {
@@ -361,4 +495,11 @@ module.exports = {
   boxToImageBounds,
   estimateHalf,
   parsePbm,
+  parsePdfTextBoxes,
+  pdfPageCount,
+  extractPdfTextPage,
+  renderPdfPagePng,
+  resolvePdfToCairo,
+  resolvePdfToPpm,
+  resolvePdfToText,
 };
