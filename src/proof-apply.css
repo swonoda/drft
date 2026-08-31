@@ -191,7 +191,8 @@ button:disabled {
 
 #candidateText {
   min-width: 100px;
-  flex: 1;
+  width: clamp(180px, 32vw, 460px);
+  flex: 0 1 460px;
   height: 32px;
   overflow: hidden;
   border: 1px solid #d9dbe8;
@@ -210,6 +211,12 @@ button:disabled {
 
 #applyCandidate {
   flex: 0 0 auto;
+  width: 38px;
+  min-width: 38px;
+  min-height: 32px;
+  padding: 0;
+  font-size: 21px;
+  line-height: 1;
 }
 
 .proof-pdf-head {

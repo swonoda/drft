@@ -225,7 +225,7 @@ test("OpenCVの変更箇所とPDF文字位置を原稿候補として返す", as
   assert.match(result.notice, /1件/);
 });
 
-test("本文上の赤字開始位置は文字列一致なしで一覧へ残す", async () => {
+test("本文上の赤字開始位置へ原稿ジャンプ候補を後付けする", async () => {
   const word = {
     text: "原稿",
     left: 0.4,
@@ -252,7 +252,7 @@ test("本文上の赤字開始位置は文字列一致なしで一覧へ残す",
   });
 
   assert.equal(result.notes.length, 1);
-  assert.equal(result.notes[0].draftStart, null);
+  assert.equal(result.notes[0].draftStart, 3);
   assert.equal(result.notes[0].targetMethod, "body-start");
   assert.match(result.notice, /赤字開始位置を1件/);
 });

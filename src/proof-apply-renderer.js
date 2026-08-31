@@ -177,9 +177,10 @@ function updateToolbar() {
     $("candidateText").value = displayedText;
   }
   $("applyCandidate").disabled = !note;
-  $("applyCandidate").textContent = change
-    ? "この変更を元に戻す"
-    : "選択位置へ反映";
+  const actionLabel = change ? "この変更を元に戻す" : "選択位置へ反映";
+  $("applyCandidate").textContent = change ? "↶" : "↵";
+  $("applyCandidate").title = actionLabel;
+  $("applyCandidate").setAttribute("aria-label", actionLabel);
 }
 
 function selectRelativeNote(offset) {

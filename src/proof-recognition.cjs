@@ -498,15 +498,14 @@ async function recognizeProofChanges(
       if (!textPage.words?.length) pagesWithoutText += 1;
       const located = await locatePage(png, { words: textPage.words || [] });
       for (const location of located.locations || []) {
-        const sourceRange =
-          location.targetMethod === "body-start"
-            ? null
-            : locateSourceRangeFromPage(
-                sourceText,
-                textPage.words,
-                location.targetWordIndex,
-                location.targetPoint,
-              );
+        // 一覧は赤線の開始点だけで確定し、原稿ジャンプ用の照合は後付けする。
+        // 照合に失敗しても変更箇所そのものは一覧から除外しない。
+        const sourceRange = locateSourceRangeFromPage(
+          sourceText,
+          textPage.words,
+          location.targetWordIndex,
+          location.targetPoint,
+        );
         const number = notes.length + 1;
         notes.push({
           id: `location-${page}-${number}`,
