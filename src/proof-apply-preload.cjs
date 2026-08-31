@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require("electron");
-const { updateProofChangeRanges } = require("./proof-apply-engine.cjs");
+const {
+  inferProofChangeType,
+  updateProofChangeRanges,
+} = require("./proof-apply-engine.cjs");
 
 contextBridge.exposeInMainWorld("proofApplyApi", {
   load: () => ipcRenderer.invoke("proof:load"),
@@ -10,6 +13,8 @@ contextBridge.exposeInMainWorld("proofApplyApi", {
   discard: () => ipcRenderer.invoke("proof:discard"),
   updateChangeRanges: (changes, before, after) =>
     updateProofChangeRanges(changes, before, after),
+  inferChangeType: (selectionStart, selectionEnd, replacement) =>
+    inferProofChangeType(selectionStart, selectionEnd, replacement),
   onRecognitionProgress: (callback) =>
     ipcRenderer.on("proof:recognition-progress", (_event, progress) =>
       callback(progress),

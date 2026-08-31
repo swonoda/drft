@@ -156,7 +156,7 @@ button:disabled {
 }
 
 .proof-manuscript-pane {
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   border-right: 1px solid #dfe1ea;
 }
 
@@ -165,8 +165,7 @@ button:disabled {
 }
 
 .proof-toolbar,
-.proof-pdf-head,
-.proof-candidate-bar {
+.proof-pdf-head {
   min-height: 44px;
   display: flex;
   align-items: center;
@@ -174,46 +173,6 @@ button:disabled {
   border-bottom: 1px solid #e8e9f1;
   background: #f8f9fd;
   padding: 6px 12px;
-}
-
-.proof-candidate-bar {
-  min-height: 50px;
-  background: #fcfcff;
-}
-
-.proof-candidate-bar label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #65697e;
-  font-size: 11px;
-}
-
-.proof-candidate-bar select,
-.proof-candidate-bar input {
-  height: 32px;
-  border: 1px solid #d9dbe8;
-  border-radius: 7px;
-  background: #fff;
-  color: #242638;
-  padding: 5px 8px;
-}
-
-.candidate-text-field {
-  min-width: 150px;
-  flex: 1;
-}
-
-.candidate-text-field input {
-  min-width: 80px;
-  width: 100%;
-}
-
-#candidateHint {
-  max-width: 150px;
-  color: #898b9c;
-  font-size: 10px;
-  line-height: 1.35;
 }
 
 .proof-toolbar > button:not(.compact) {
@@ -230,12 +189,27 @@ button:disabled {
   font-size: 12px;
 }
 
-#changeDescription {
+#candidateText {
+  min-width: 100px;
+  flex: 1;
+  height: 32px;
   overflow: hidden;
+  border: 1px solid #d9dbe8;
+  border-radius: 7px;
+  background: #fff;
   color: #3e4258;
+  padding: 5px 9px;
   font-size: 13px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+#candidateText:read-only {
+  background: #f3f4f8;
+}
+
+#applyCandidate {
+  flex: 0 0 auto;
 }
 
 .proof-pdf-head {

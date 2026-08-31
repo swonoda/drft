@@ -136,6 +136,108 @@ def dark_pixel_count(image: np.ndarray, box: dict) -> int:
     return int(np.count_nonzero(neutral_dark))
 
 
+def distance_to_box(x: int, y: int, box: dict) -> float:
+    delta_x = max(box["left"] - x, x - box["right"], 0)
+    delta_y = max(box["top"] - y, y - box["bottom"], 0)
+    return math.hypot(delta_x, delta_y)
+
+
+def first_contact_point(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    box: dict,
+) -> tuple[int, int]:
+    """本文の読み順で最初に現れる赤画素を返す。"""
+    vertical = (box["bottom"] - box["top"]) > (
+        box["right"] - box["left"]
+    ) * 1.35
+    if vertical:
+        index = min(
+            range(len(xs)), key=lambda item: (int(ys[item]), -int(xs[item]))
+        )
+    else:
+        index = min(range(len(xs)), key=lambda item: (int(xs[item]), int(ys[item])))
+    return int(xs[index]), int(ys[index])
+
+
+def body_mark_target(
+    allowed: np.ndarray,
+    word_candidates: list[tuple[int, dict, int]],
+    width: int,
+    height: int,
+    typical_thickness: float,
+):
+    """本文上の赤い校正記号を、引出線より先に支点として探す。"""
+    red_y, red_x = np.nonzero(allowed)
+    if red_x.size == 0:
+        return None
+
+    contacts = []
+    for index, box, thickness in word_candidates:
+        margin = max(4, round(max(thickness, typical_thickness) * 0.55))
+        near = (
+            (red_x >= box["left"] - margin)
+            & (red_x <= box["right"] + margin)
+            & (red_y >= box["top"] - margin)
+            & (red_y <= box["bottom"] + margin)
+        )
+        contact_x = red_x[near]
+        contact_y = red_y[near]
+        if contact_x.size == 0:
+            continue
+        distances = np.array(
+            [
+                distance_to_box(int(x), int(y), box)
+                for x, y in zip(contact_x, contact_y)
+            ]
+        )
+        minimum_distance = float(np.min(distances))
+        if minimum_distance > margin:
+            continue
+        closest = distances <= minimum_distance + 1.5
+        point_x, point_y = first_contact_point(
+            contact_x[closest], contact_y[closest], box
+        )
+        size_penalty = max(0.0, typical_thickness * 0.65 - thickness) * 2.0
+        center_x = (box["left"] + box["right"]) / 2
+        center_y = (box["top"] + box["bottom"]) / 2
+        vertical = (box["bottom"] - box["top"]) > (
+            box["right"] - box["left"]
+        ) * 1.35
+        contacts.append(
+            {
+                "index": index,
+                "box": box,
+                "distance": minimum_distance,
+                "rank": minimum_distance + size_penalty,
+                "pointPixels": (point_x, point_y),
+                # 同じ取り消し線が複数文字へ触れる場合は本文の先頭を使う。
+                "readingOrder": (
+                    (-center_x, center_y) if vertical else (center_y, center_x)
+                ),
+            }
+        )
+
+    if not contacts:
+        return None
+    closest_rank = min(contact["rank"] for contact in contacts)
+    comparable = [
+        contact for contact in contacts if contact["rank"] <= closest_rank + 2.0
+    ]
+    best = min(comparable, key=lambda contact: contact["readingOrder"])
+    point_x, point_y = best.pop("pointPixels")
+    best.pop("readingOrder", None)
+    best.pop("rank", None)
+    best["bounds"] = normalized_box(best.pop("box"), width, height)
+    best["point"] = {"x": point_x / width, "y": point_y / height}
+    best["confidence"] = max(
+        72,
+        min(98, round(98 - (best["distance"] / max(1, typical_thickness)) * 24)),
+    )
+    best["method"] = "body-mark"
+    return best
+
+
 def target_for_group(
     group: dict,
     labels: np.ndarray,
@@ -149,6 +251,34 @@ def target_for_group(
     red_y, red_x = np.nonzero(allowed)
     if red_x.size == 0:
         return None
+
+    word_candidates = []
+    for index, word in enumerate(words):
+        box = pixel_box(word, width, height)
+        if image is not None and dark_pixel_count(image, box) < 2:
+            continue
+        thickness = max(
+            1,
+            min(box["right"] - box["left"] + 1, box["bottom"] - box["top"] + 1),
+        )
+        word_candidates.append((index, box, thickness))
+    if not word_candidates:
+        return None
+    typical_thickness = float(
+        np.median([candidate[2] for candidate in word_candidates])
+    )
+
+    # 校正記号は本文から引き出されるため、本文上の赤画素を最優先する。
+    # 欄外注記から線の向きを推測する処理は、本文側で取れない場合だけ使う。
+    body_target = body_mark_target(
+        allowed,
+        word_candidates,
+        width,
+        height,
+        typical_thickness,
+    )
+    if body_target is not None:
+        return body_target
 
     # グループ中で最も長く伸びる連結成分を引出線候補にする。
     # 手書き文字の各画は短いため、ここで支点候補から概ね除外できる。
@@ -214,20 +344,6 @@ def target_for_group(
             if distance >= farthest * 0.7
         ]
 
-    word_candidates = []
-    for index, word in enumerate(words):
-        box = pixel_box(word, width, height)
-        if image is not None and dark_pixel_count(image, box) < 2:
-            continue
-        thickness = max(
-            1,
-            min(box["right"] - box["left"] + 1, box["bottom"] - box["top"] + 1),
-        )
-        word_candidates.append((index, box, thickness))
-    if not word_candidates:
-        return None
-    typical_thickness = float(np.median([candidate[2] for candidate in word_candidates]))
-
     best = None
     for index, box, thickness in word_candidates:
         anchor_candidates = []
@@ -260,6 +376,7 @@ def target_for_group(
         20,
         min(90, round(90 - (best["distance"] / maximum_distance) * 70)),
     )
+    best["method"] = "leader-end"
     return best
 
 
@@ -284,6 +401,7 @@ def locate(image_path: Path, request: dict) -> dict:
                 "targetBounds": target["bounds"] if target else None,
                 "targetPoint": target["point"] if target else None,
                 "confidence": target["confidence"] if target else 0,
+                "targetMethod": target["method"] if target else None,
             }
         )
     return {"redPixels": int(np.count_nonzero(mask)), "locations": locations}

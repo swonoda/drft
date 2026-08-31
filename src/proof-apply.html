@@ -38,36 +38,23 @@
     <main class="proof-workspace">
       <section class="proof-manuscript-pane" aria-label="仮反映原稿">
         <div class="proof-toolbar">
-          <button id="previousChange" type="button" aria-label="前の変更">
+          <button id="nextChange" type="button" aria-label="次の検出箇所">
             ‹
           </button>
           <span id="changeState">0 / 0</span>
-          <button id="nextChange" type="button" aria-label="次の変更">›</button>
-          <span id="changeDescription">原稿へ反映した変更はありません</span>
-          <button id="revertChange" class="secondary compact" type="button">
-            この変更を元に戻す
+          <button id="previousChange" type="button" aria-label="前の検出箇所">
+            ›
           </button>
-        </div>
-        <div class="proof-candidate-bar">
-          <label>
-            <span>分類</span>
-            <select id="candidateType">
-              <option value="addition">追加</option>
-              <option value="replacement">置換</option>
-              <option value="deletion">削除</option>
-              <option value="other">それ以外</option>
-            </select>
-          </label>
-          <label class="candidate-text-field">
-            <span>赤字の内容</span>
-            <input id="candidateText" type="text" autocomplete="off" />
-          </label>
+          <input
+            id="candidateText"
+            type="text"
+            autocomplete="off"
+            aria-label="赤字の内容"
+            placeholder="赤字の内容"
+          />
           <button id="applyCandidate" class="secondary" type="button">
             選択位置へ反映
           </button>
-          <span id="candidateHint"
-            >追加はカーソル位置、置換・削除は選択範囲へ反映します</span
-          >
         </div>
         <div class="proof-editor-shell">
           <pre id="noteBackdrop" aria-hidden="true"></pre>

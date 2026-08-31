@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   buildProofDraft,
   findSingleEdit,
+  inferProofChangeType,
   updateProofChangeRanges,
 } = require("../src/proof-apply-engine.cjs");
 
@@ -63,6 +64,13 @@ test("一回の編集範囲を検出する", () => {
     delta: 1,
   });
   assert.equal(findSingleEdit("same", "same"), null);
+});
+
+test("選択範囲と入力内容から変更方法を決める", () => {
+  assert.equal(inferProofChangeType(3, 3, "追加"), "addition");
+  assert.equal(inferProofChangeType(3, 5, "置換"), "replacement");
+  assert.equal(inferProofChangeType(3, 5, ""), "deletion");
+  assert.equal(inferProofChangeType(3, 3, ""), null);
 });
 
 test("仮反映文字を編集しても後続候補の位置を保つ", () => {

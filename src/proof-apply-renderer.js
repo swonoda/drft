@@ -138,45 +138,62 @@ function renderHighlights() {
   updateToolbar();
 }
 
-function changeDescription(change) {
-  if (!change) return "原稿へ反映した変更はありません";
-  if (change.reverted) return "この変更は元に戻しました";
-  if (change.type === "addition") return `追加：${change.replacement}`;
-  if (change.type === "deletion") return `削除：${change.original}`;
-  if (change.type === "replacement")
-    return `置換：${change.original} → ${change.replacement}`;
-  return change.label || "その他の変更";
+function noteChange(note, { includeReverted = false } = {}) {
+  if (!note) return null;
+  return [...changes]
+    .reverse()
+    .find(
+      (change) =>
+        change.groupId === note.id && (includeReverted || !change.reverted),
+    );
+}
+
+function selectedNoteIndex() {
+  return notes.findIndex((note) => note.id === selectedNoteId);
 }
 
 function updateToolbar() {
-  const change = changes[activeIndex];
-  $("changeState").textContent = changes.length
-    ? `${activeIndex + 1} / ${changes.length}`
+  const note = noteForId(selectedNoteId);
+  const noteIndex = selectedNoteIndex();
+  const change = noteChange(note);
+  $("changeState").textContent = notes.length
+    ? `${noteIndex + 1} / ${notes.length}`
     : "0 / 0";
-  $("changeDescription").textContent = changeDescription(change);
-  $("previousChange").disabled = changes.length === 0;
-  $("nextChange").disabled = changes.length === 0;
-  $("revertChange").disabled = !change || change.reverted;
-}
-
-function selectActive(index) {
-  if (!changes.length) {
-    activeIndex = -1;
-    renderHighlights();
-    return;
+  $("previousChange").disabled = notes.length === 0;
+  $("nextChange").disabled = notes.length === 0;
+  $("candidateText").disabled = !note;
+  $("candidateText").readOnly = Boolean(change);
+  $("candidateText").placeholder = note
+    ? Number.isInteger(note.draftStart)
+      ? "赤字の内容"
+      : "赤字の内容（原稿位置は手動で選択）"
+    : "変更箇所はありません";
+  const displayedText = change
+    ? change.replacement
+    : typeof note?.text === "string"
+      ? note.text
+      : "";
+  if ($("candidateText").value !== displayedText) {
+    $("candidateText").value = displayedText;
   }
-  activeIndex = (index + changes.length) % changes.length;
-  const change = changes[activeIndex];
-  editor.focus();
-  editor.setSelectionRange(change.draftStart, change.draftEnd);
-  if (change.page && change.page !== pdfPage) showPdfPage(change.page);
-  renderHighlights();
+  $("applyCandidate").disabled = !note;
+  $("applyCandidate").textContent = change
+    ? "この変更を元に戻す"
+    : "選択位置へ反映";
 }
 
-function revertActiveChange() {
-  const change = changes[activeIndex];
+function selectRelativeNote(offset) {
+  if (!notes.length) return;
+  const current = Math.max(0, selectedNoteIndex());
+  const next = (current + offset + notes.length) % notes.length;
+  selectNote(notes[next].id);
+}
+
+function revertChange(note, change) {
   if (!change || change.reverted) return;
   const before = editor.value;
+  const restoredStart = change.draftStart;
+  const restoredEnd = restoredStart + change.original.length;
   const after =
     before.slice(0, change.draftStart) +
     change.original +
@@ -185,10 +202,16 @@ function revertActiveChange() {
   updateRanges(before, after);
   const current = changes.find((candidate) => candidate.id === change.id);
   if (current) current.reverted = true;
+  const currentNote = noteForId(note?.id);
+  if (currentNote) currentNote.used = false;
+  activeIndex = -1;
   previousText = after;
   manualEdits = true;
   window.proofApplyApi.updateDraft(after);
+  editor.focus({ preventScroll: true });
+  editor.setSelectionRange(restoredStart, restoredEnd);
   renderHighlights();
+  renderNotes();
 }
 
 editor.addEventListener("input", () => {
@@ -214,6 +237,11 @@ editor.addEventListener("click", () => {
   );
   if (index >= 0 && index !== activeIndex) {
     activeIndex = index;
+    if (changes[index].groupId && noteForId(changes[index].groupId)) {
+      selectedNoteId = changes[index].groupId;
+      renderNotes();
+      renderNoteOverlay();
+    }
     renderHighlights();
   }
 });
@@ -224,9 +252,8 @@ if (typeof ResizeObserver === "function") {
   window.addEventListener("resize", renderHighlights);
 }
 
-$("previousChange").onclick = () => selectActive(activeIndex - 1);
-$("nextChange").onclick = () => selectActive(activeIndex + 1);
-$("revertChange").onclick = revertActiveChange;
+$("previousChange").onclick = () => selectRelativeNote(-1);
+$("nextChange").onclick = () => selectRelativeNote(1);
 $("commitButton").onclick = async () => {
   $("commitButton").disabled = true;
   try {
@@ -258,6 +285,12 @@ function updatePdfToolbar() {
 
 function noteForId(id) {
   return notes.find((note) => note.id === id);
+}
+
+function syncNoteUsage() {
+  for (const note of notes) {
+    note.used = Boolean(noteChange(note));
+  }
 }
 
 function revealEditorRange(start, end = start) {
@@ -323,8 +356,11 @@ async function selectNote(id) {
   const note = noteForId(id);
   if (!note) return;
   selectedNoteId = id;
-  $("candidateText").value = note.text || "";
-  updateCandidateControls();
+  const change = noteChange(note);
+  activeIndex = change
+    ? changes.findIndex((candidate) => candidate.id === change.id)
+    : -1;
+  updateToolbar();
   renderNotes();
   renderNoteOverlay();
   if (note.page !== pdfPage) await showPdfPage(note.page);
@@ -332,12 +368,6 @@ async function selectNote(id) {
   revealPdfNote(note);
   if (Number.isInteger(note.draftStart) && Number.isInteger(note.draftEnd)) {
     revealEditorRange(note.draftStart, note.draftEnd);
-    $("candidateHint").textContent = note.matchedText
-      ? `原稿の「${note.matchedText}」付近を選択しました。位置と分類を確認してください`
-      : "原稿中の候補位置を選択しました。位置と分類を確認してください";
-  } else {
-    $("candidateHint").textContent =
-      "原稿位置は特定できませんでした。左の原稿で対象位置を選択してください";
   }
 }
 
@@ -502,44 +532,58 @@ $("zoomInPdf").onclick = () => {
   requestAnimationFrame(() => revealPdfNote(noteForId(selectedNoteId)));
 };
 
-function updateCandidateControls() {
-  const type = $("candidateType").value;
-  $("candidateText").disabled = type === "deletion" || type === "other";
-  $("applyCandidate").textContent =
-    type === "other" ? "確認済みにする" : "選択位置へ反映";
+function nextPendingNote(afterId) {
+  if (!notes.length) return null;
+  const start = Math.max(
+    0,
+    notes.findIndex((note) => note.id === afterId),
+  );
+  for (let offset = 1; offset <= notes.length; offset += 1) {
+    const note = notes[(start + offset) % notes.length];
+    if (!note.used && !noteChange(note)) return note;
+  }
+  return null;
 }
 
-$("candidateType").onchange = updateCandidateControls;
-$("applyCandidate").onclick = () => {
-  const type = $("candidateType").value;
+$("candidateText").oninput = () => {
   const note = noteForId(selectedNoteId);
-  if (type === "other") {
-    if (note) note.used = true;
-    renderNotes();
+  if (note && !noteChange(note)) note.text = $("candidateText").value;
+};
+
+$("applyCandidate").onclick = async () => {
+  const note = noteForId(selectedNoteId);
+  if (!note) return;
+  const applied = noteChange(note);
+  if (applied) {
+    revertChange(note, applied);
     return;
   }
+
   const selectionStart = editor.selectionStart;
   const selectionEnd = editor.selectionEnd;
+  const replacement = $("candidateText").value;
+  const type = window.proofApplyApi.inferChangeType(
+    selectionStart,
+    selectionEnd,
+    replacement,
+  );
+  if (!type) {
+    showNotice(
+      "削除する文字を選択するか、追加する位置へカーソルを置いて赤字の内容を入力してください。",
+    );
+    return;
+  }
   const start = selectionStart;
-  const end = type === "addition" ? selectionStart : selectionEnd;
-  if (type !== "addition" && end <= start) {
-    $("candidateHint").textContent =
-      "置換・削除する元の文字を左の原稿で選択してください";
-    return;
-  }
-  const replacement = type === "deletion" ? "" : $("candidateText").value;
-  if (type !== "deletion" && !replacement) {
-    $("candidateHint").textContent = "赤字の内容を入力してください";
-    return;
-  }
+  const end = selectionEnd;
   const before = editor.value;
   const original = before.slice(start, end);
   const after = before.slice(0, start) + replacement + before.slice(end);
   updateRanges(before, after);
   const id = `manual-${Date.now()}-${changes.length + 1}`;
+  const noteId = note.id;
   changes.push({
     id,
-    groupId: note?.id || null,
+    groupId: noteId,
     type,
     original,
     replacement,
@@ -547,9 +591,9 @@ $("applyCandidate").onclick = () => {
     draftEnd: start + replacement.length,
     edited: false,
     reverted: false,
-    label: note?.text || replacement,
-    confidence: note ? note.confidence / 100 : null,
-    page: note?.page || pdfPage,
+    label: replacement || original,
+    confidence: note.confidence / 100,
+    page: note.page,
   });
   changes.sort(
     (left, right) =>
@@ -560,13 +604,17 @@ $("applyCandidate").onclick = () => {
   editor.setSelectionRange(start, start + replacement.length);
   previousText = after;
   manualEdits = true;
-  if (note) note.used = true;
+  const currentNote = noteForId(noteId);
+  if (currentNote) {
+    currentNote.used = true;
+    currentNote.text = replacement;
+  }
   window.proofApplyApi.updateDraft(after);
-  $("candidateHint").textContent =
-    "仮反映しました。背景色の付いた箇所はそのまま直接編集できます";
   renderHighlights();
   renderNotes();
-  editor.focus();
+  const next = nextPendingNote(noteId);
+  if (next) await selectNote(next.id);
+  else editor.focus();
 };
 
 async function runRecognition() {
@@ -589,9 +637,9 @@ async function runRecognition() {
     notes = Array.isArray(result?.notes)
       ? result.notes.map((note) => ({ ...note }))
       : [];
+    syncNoteUsage();
     selectedNoteId = notes[0]?.id || null;
     if (notes[0]) {
-      $("candidateText").value = "";
       selectNote(notes[0].id);
     }
     showProgress(result?.notice || "変更箇所の検出が完了しました。", 100);
@@ -634,6 +682,7 @@ async function initialize() {
   notes = Array.isArray(state?.notes)
     ? state.notes.map((note) => ({ ...note }))
     : [];
+  syncNoteUsage();
   manualEdits =
     changes.length > 0 || editor.value !== (state?.sourceText || editor.value);
   activeIndex = changes.length ? 0 : -1;
@@ -645,7 +694,6 @@ async function initialize() {
   renderHighlights();
   renderNotes();
   updatePdfToolbar();
-  updateCandidateControls();
   await showPdfPage(1);
   runRecognition();
   editor.focus();

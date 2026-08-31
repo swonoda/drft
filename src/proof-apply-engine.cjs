@@ -121,8 +121,20 @@ function updateProofChangeRanges(changes, before, after) {
   });
 }
 
+function inferProofChangeType(selectionStart, selectionEnd, replacement) {
+  const start = Number(selectionStart);
+  const end = Number(selectionEnd);
+  const text = typeof replacement === "string" ? replacement : "";
+  if (!Number.isInteger(start) || !Number.isInteger(end) || end < start) {
+    throw new TypeError("原稿の選択位置が不正です");
+  }
+  if (start === end) return text ? "addition" : null;
+  return text ? "replacement" : "deletion";
+}
+
 module.exports = {
   buildProofDraft,
   findSingleEdit,
+  inferProofChangeType,
   updateProofChangeRanges,
 };
