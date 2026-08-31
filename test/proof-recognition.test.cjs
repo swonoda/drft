@@ -171,6 +171,35 @@ test("変更箇所をページ順、右列から左列、同じ列では上か�
   );
 });
 
+test("近接する縦書き列を同じ列として混ぜない", () => {
+  const notes = [
+    {
+      id: "left-top",
+      page: 1,
+      readingBounds: { left: 0.782, top: 0.1, width: 0.012, height: 0.02 },
+    },
+    {
+      id: "right-bottom",
+      page: 1,
+      readingBounds: { left: 0.8, top: 0.7, width: 0.012, height: 0.02 },
+    },
+    {
+      id: "right-top",
+      page: 1,
+      readingBounds: { left: 0.801, top: 0.1, width: 0.012, height: 0.02 },
+    },
+    {
+      id: "left-bottom",
+      page: 1,
+      readingBounds: { left: 0.783, top: 0.7, width: 0.012, height: 0.02 },
+    },
+  ];
+  assert.deepEqual(
+    sortProofNotesReadingOrder(notes).map((note) => note.id),
+    ["right-top", "right-bottom", "left-top", "left-bottom"],
+  );
+});
+
 test("赤字のないPDFは本文を推測で変更しない", async () => {
   let locateCalls = 0;
   const result = await recognizeProofChanges(

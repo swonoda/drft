@@ -440,19 +440,87 @@ function locateSourceRangeFromPage(sourceText, words, targetWordIndex, point) {
 }
 
 function sortProofNotesReadingOrder(notes) {
-  return [...notes].sort((left, right) => {
-    if (left.page !== right.page) return left.page - right.page;
-    const leftBounds = left.targetBounds || left.bounds || {};
-    const rightBounds = right.targetBounds || right.bounds || {};
-    const leftX = Number(leftBounds.left) + Number(leftBounds.width || 0) / 2;
-    const rightX =
-      Number(rightBounds.left) + Number(rightBounds.width || 0) / 2;
-    if (Math.abs(leftX - rightX) > 0.025) return rightX - leftX;
-    const leftY = Number(leftBounds.top) + Number(leftBounds.height || 0) / 2;
-    const rightY =
-      Number(rightBounds.top) + Number(rightBounds.height || 0) / 2;
-    return leftY - rightY;
+  const pages = new Map();
+  notes.forEach((note, index) => {
+    const page = Number(note.page) || 0;
+    if (!pages.has(page)) pages.set(page, []);
+    pages.get(page).push({ note, index });
   });
+
+  return [...pages.entries()]
+    .sort(([leftPage], [rightPage]) => leftPage - rightPage)
+    .flatMap(([, entries]) => {
+      const positioned = [];
+      const unpositioned = [];
+      for (const entry of entries) {
+        const bounds =
+          entry.note.readingBounds ||
+          entry.note.targetBounds ||
+          entry.note.bounds ||
+          {};
+        const left = Number(bounds.left);
+        const top = Number(bounds.top);
+        const width = Number(bounds.width || 0);
+        const height = Number(bounds.height || 0);
+        if (!Number.isFinite(left) || !Number.isFinite(top)) {
+          unpositioned.push(entry);
+          continue;
+        }
+        positioned.push({
+          ...entry,
+          x: left + width / 2,
+          y: top + height / 2,
+          width,
+        });
+      }
+
+      const widths = positioned
+        .map((entry) => entry.width)
+        .filter((width) => width > 0)
+        .sort((left, right) => left - right);
+      const medianWidth = widths[Math.floor(widths.length / 2)] || 0.01;
+      // 隣の縦列を同じ列へまとめず、同一列内の座標揺れだけを吸収する。
+      const columnTolerance = Math.max(
+        0.002,
+        Math.min(0.012, medianWidth * 0.55),
+      );
+      const columns = [];
+      for (const entry of positioned.sort(
+        (left, right) => right.x - left.x || left.y - right.y,
+      )) {
+        let column = columns
+          .map((candidate) => ({
+            candidate,
+            distance: Math.abs(candidate.center - entry.x),
+          }))
+          .filter(({ distance }) => distance <= columnTolerance)
+          .sort((left, right) => left.distance - right.distance)[0]?.candidate;
+        if (!column) {
+          column = { center: entry.x, entries: [] };
+          columns.push(column);
+        }
+        column.entries.push(entry);
+        column.center =
+          column.entries.reduce((total, candidate) => total + candidate.x, 0) /
+          column.entries.length;
+      }
+
+      return [
+        ...columns
+          .sort((left, right) => right.center - left.center)
+          .flatMap((column) =>
+            column.entries
+              .sort(
+                (left, right) =>
+                  left.y - right.y || left.index - right.index,
+              )
+              .map(({ note }) => note),
+          ),
+        ...unpositioned
+          .sort((left, right) => left.index - right.index)
+          .map(({ note }) => note),
+      ];
+    });
 }
 
 async function recognizeProofChanges(
@@ -506,6 +574,17 @@ async function recognizeProofChanges(
           location.targetWordIndex,
           location.targetPoint,
         );
+        const targetWord = Number.isInteger(location.targetWordIndex)
+          ? textPage.words[location.targetWordIndex]
+          : null;
+        const readingBounds = targetWord
+          ? {
+              left: targetWord.left,
+              top: targetWord.top,
+              width: targetWord.width,
+              height: targetWord.height,
+            }
+          : null;
         const number = notes.length + 1;
         notes.push({
           id: `location-${page}-${number}`,
@@ -515,6 +594,7 @@ async function recognizeProofChanges(
           bounds: location.bounds,
           targetBounds: location.targetBounds,
           targetPoint: location.targetPoint,
+          readingBounds,
           confidence: Number(location.confidence) || 0,
           targetMethod: location.targetMethod || "",
           draftStart: sourceRange?.draftStart ?? null,
