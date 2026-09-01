@@ -503,11 +503,18 @@ body {
   overflow: visible;
 }
 
-.proofread-leaders polyline {
+.proofread-leaders polyline,
+.proofread-leaders path {
   fill: none;
   stroke: #d34f5b;
   stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+}
+
+.proofread-ruby-leader {
+  stroke-width: 1.5;
 }
 
 .proofread-strike {
@@ -515,6 +522,22 @@ body {
   width: 1.5px;
   border-radius: 1px;
   background: #d34f5b;
+}
+
+.proofread-ruby-base-line,
+.proofread-ruby-strike {
+  position: absolute;
+  width: 1.5px;
+  border-radius: 1px;
+  background: #d34f5b;
+}
+
+.proofread-note-ruby {
+  line-height: 1;
+}
+
+.proofread-ruby-insert {
+  stroke-width: 1.25;
 }
 
 .proofread-note {

@@ -123,6 +123,142 @@ test("追加だけの変更は文字間への挿入指示へ変換する", () =>
   ]);
 });
 
+test("親文字が同じならルビ追加を本文追加と分ける", () => {
+  assert.deepEqual(
+    buildProofreadChanges("東條さん", "東條《とうじょう》さん"),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "",
+        replacement: "とうじょう",
+        type: "ruby-add",
+        rubyBase: "東條",
+        rubyStart: 0,
+        rubyEnd: 0,
+      },
+    ],
+  );
+});
+
+test("既存ルビの一部変更を専用の置換指示にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges("東條《ひがしじょう》さん", "東條《とうじょう》さん"),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "ひがし",
+        replacement: "とう",
+        type: "ruby-replace",
+        rubyBase: "東條",
+        rubyStart: 0,
+        rubyEnd: 3,
+      },
+    ],
+  );
+});
+
+test("既存ルビの一部削除を専用の削除指示にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "東條《ひがしとうじょう》さん",
+      "東條《とうじょう》さん",
+    ),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "ひがし",
+        replacement: null,
+        type: "ruby-delete",
+        rubyBase: "東條",
+        rubyStart: 0,
+        rubyEnd: 3,
+      },
+    ],
+  );
+});
+
+test("既存ルビの途中への追加位置を保持する", () => {
+  assert.deepEqual(
+    buildProofreadChanges("東條《とうじょ》さん", "東條《とうじょう》さん"),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "",
+        replacement: "う",
+        type: "ruby-add",
+        rubyBase: "東條",
+        rubyStart: 4,
+        rubyEnd: 4,
+      },
+    ],
+  );
+});
+
+test("同じルビ内の複数変更は全体置換へまとめる", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "白熊《しろくま》が歩く。",
+      "白熊《ほっきょくぐま》が歩く。",
+    ),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "しろくま",
+        replacement: "ほっきょくぐま",
+        type: "ruby-replace",
+        rubyBase: "白熊",
+        rubyStart: 0,
+        rubyEnd: 4,
+      },
+    ],
+  );
+});
+
+test("ルビ全体の削除を親文字の削除にしない", () => {
+  assert.deepEqual(
+    buildProofreadChanges("東條《とうじょう》さん", "東條さん"),
+    [
+      {
+        id: 1,
+        start: 0,
+        end: 2,
+        removed: "とうじょう",
+        replacement: null,
+        type: "ruby-delete",
+        rubyBase: "東條",
+        rubyStart: 0,
+        rubyEnd: 5,
+      },
+    ],
+  );
+});
+
+test("明示的なルビ記法の後にある本文変更も元原稿位置を保つ", () => {
+  const oldText = "｜North Star《ノース・スター》が光った。";
+  const newText = "｜North Star《ノース・スター》が輝いた。";
+  const changes = buildProofreadChanges(oldText, newText);
+  assert.deepEqual(changes, [
+    {
+      id: 1,
+      start: oldText.indexOf("光"),
+      end: oldText.indexOf("光") + 2,
+      removed: "光っ",
+      replacement: "輝い",
+      type: "replace",
+    },
+  ]);
+});
+
 test("文中への追加は前後の文字間を挿入位置にする", () => {
   assert.deepEqual(
     buildProofreadChanges(

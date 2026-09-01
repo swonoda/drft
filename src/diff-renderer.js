@@ -127,9 +127,14 @@ function visibleProofreadChanges(text, changes) {
         start: manuscriptText(normalized.slice(0, change.start)).length,
         end: manuscriptText(normalized.slice(0, change.end)).length,
         note:
-          change.type === "replace" || change.type === "add"
-            ? manuscriptTextWithLineBreaks(change.replacement || "")
-            : "トル",
+          change.type === "ruby-delete"
+            ? "トル"
+            : change.type === "replace" ||
+                change.type === "add" ||
+                change.type === "ruby-replace" ||
+                change.type === "ruby-add"
+              ? manuscriptTextWithLineBreaks(change.replacement || "")
+              : "トル",
       }))
       .filter(
         (change) =>
@@ -177,11 +182,30 @@ function positionProofreadNotes(page) {
     rect.bottom > bodyRect.top &&
     rect.top < bodyRect.bottom;
   const occupied = [];
+  const annotationOccupied = [];
+  const overlaps = (firstRect, secondRect, gap = 0) =>
+    !(
+      firstRect.x + firstRect.width + gap <= secondRect.x ||
+      secondRect.x + secondRect.width + gap <= firstRect.x ||
+      firstRect.y + firstRect.height + gap <= secondRect.y ||
+      secondRect.y + secondRect.height + gap <= firstRect.y
+    );
+  const occupyAnnotation = (rect) => {
+    occupied.push(rect);
+    annotationOccupied.push(rect);
+  };
   for (const item of nodes) {
     const textRange = document.createRange();
     textRange.selectNodeContents(item.node);
     occupied.push(
       ...[...textRange.getClientRects()].filter(visible).map(toPageRect),
+    );
+  }
+  for (const rubyText of content.querySelectorAll("rt")) {
+    const rubyRange = document.createRange();
+    rubyRange.selectNodeContents(rubyText);
+    occupied.push(
+      ...[...rubyRange.getClientRects()].filter(visible).map(toPageRect),
     );
   }
   const leaderSvg = document.createElementNS(
@@ -223,6 +247,16 @@ function positionProofreadNotes(page) {
       points.map((point) => `${point.x},${point.y}`).join(" "),
     );
     leaderSvg.append(leader);
+    for (let index = 1; index < points.length; index++) {
+      const start = points[index - 1];
+      const end = points[index];
+      occupyAnnotation({
+        x: Math.min(start.x, end.x) - 1,
+        y: Math.min(start.y, end.y) - 1,
+        width: Math.max(2, Math.abs(end.x - start.x) + 2),
+        height: Math.max(2, Math.abs(end.y - start.y) + 2),
+      });
+    }
   };
   const appendStraightLeader = (start, end) => {
     const leader = document.createElementNS(
@@ -232,6 +266,71 @@ function positionProofreadNotes(page) {
     leaderIndex++;
     leader.setAttribute("points", `${start.x},${start.y} ${end.x},${end.y}`);
     leaderSvg.append(leader);
+    occupyAnnotation({
+      x: Math.min(start.x, end.x) - 1,
+      y: Math.min(start.y, end.y) - 1,
+      width: Math.max(2, Math.abs(end.x - start.x) + 2),
+      height: Math.max(2, Math.abs(end.y - start.y) + 2),
+    });
+  };
+  const leaderBounds = (points) =>
+    points.slice(1).map((point, index) => {
+      const previous = points[index];
+      return {
+        x: Math.min(previous.x, point.x) - 1,
+        y: Math.min(previous.y, point.y) - 1,
+        width: Math.max(2, Math.abs(point.x - previous.x) + 2),
+        height: Math.max(2, Math.abs(point.y - previous.y) + 2),
+      };
+    });
+  const appendRubyLeader = (points) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.classList.add("proofread-ruby-leader");
+    if (points.length < 3) {
+      path.setAttribute(
+        "d",
+        points
+          .map((point, index) => `${index ? "L" : "M"} ${point.x} ${point.y}`)
+          .join(" "),
+      );
+    } else {
+      const radius = 4;
+      const commands = [`M ${points[0].x} ${points[0].y}`];
+      for (let index = 1; index < points.length - 1; index++) {
+        const previous = points[index - 1];
+        const current = points[index];
+        const next = points[index + 1];
+        const beforeDistance = Math.hypot(
+          current.x - previous.x,
+          current.y - previous.y,
+        );
+        const afterDistance = Math.hypot(
+          next.x - current.x,
+          next.y - current.y,
+        );
+        const beforeRatio =
+          Math.min(radius, beforeDistance / 2) / Math.max(1, beforeDistance);
+        const afterRatio =
+          Math.min(radius, afterDistance / 2) / Math.max(1, afterDistance);
+        const before = {
+          x: current.x + (previous.x - current.x) * beforeRatio,
+          y: current.y + (previous.y - current.y) * beforeRatio,
+        };
+        const after = {
+          x: current.x + (next.x - current.x) * afterRatio,
+          y: current.y + (next.y - current.y) * afterRatio,
+        };
+        commands.push(
+          `L ${before.x} ${before.y}`,
+          `Q ${current.x} ${current.y} ${after.x} ${after.y}`,
+        );
+      }
+      const last = points.at(-1);
+      commands.push(`L ${last.x} ${last.y}`);
+      path.setAttribute("d", commands.join(" "));
+    }
+    leaderSvg.append(path);
+    for (const bounds of leaderBounds(points)) occupyAnnotation(bounds);
   };
   const insertionPoint = (changeOffset) => {
     const item =
@@ -289,6 +388,12 @@ function positionProofreadNotes(page) {
         ].join(" "),
       );
       leaderSvg.append(marker);
+      occupyAnnotation({
+        x: insertion.anchor.x - 1,
+        y: insertion.anchor.y - arm - 1,
+        width: arm + 2,
+        height: arm * 2 + 2,
+      });
 
       const note = document.createElement("span");
       note.className = "proofread-note proofread-note-add";
@@ -315,7 +420,7 @@ function positionProofreadNotes(page) {
           note.style.width = `${blockPosition.width}px`;
           note.style.height = `${blockPosition.height}px`;
           layer.append(note);
-          occupied.push(blockPosition);
+          occupyAnnotation(blockPosition);
           appendLeader(insertion.anchor, blockPosition);
           continue;
         }
@@ -333,7 +438,7 @@ function positionProofreadNotes(page) {
       note.style.top = `${position.y}px`;
       note.style.left = `${position.x}px`;
       layer.append(note);
-      occupied.push(position);
+      occupyAnnotation(position);
       appendLeader(insertion.anchor, position);
       continue;
     }
@@ -341,6 +446,228 @@ function positionProofreadNotes(page) {
     const first = nodes.find((item) => change.start < item.end);
     const last = [...nodes].reverse().find((item) => change.end > item.start);
     if (!first || !last) continue;
+    const rubyChange =
+      change.type === "ruby-add" ||
+      change.type === "ruby-replace" ||
+      change.type === "ruby-delete";
+    if (rubyChange) {
+      const baseRange = document.createRange();
+      baseRange.setStart(first.node, Math.max(0, change.start - first.start));
+      baseRange.setEnd(
+        last.node,
+        Math.min(last.node.data.length, change.end - last.start),
+      );
+      const baseRects = [...baseRange.getClientRects()]
+        .filter(visible)
+        .map(toPageRect);
+      if (!baseRects.length) continue;
+      const fontSize = parseFloat(
+        getComputedStyle(first.node.parentElement).fontSize,
+      );
+      const rubyElement = first.node.parentElement?.closest("ruby");
+      const rubyText = rubyElement?.querySelector("rt");
+      const rubyNode = rubyText?.firstChild;
+      const rubyLength =
+        rubyNode?.nodeType === Node.TEXT_NODE ? rubyNode.data.length : 0;
+      const targetMarks = [];
+      let anchor;
+
+      if (
+        change.type === "ruby-add" &&
+        rubyLength > 0 &&
+        Number.isInteger(change.rubyStart)
+      ) {
+        const insertionOffset = Math.max(
+          0,
+          Math.min(rubyLength, change.rubyStart),
+        );
+        const characterOffset = Math.min(
+          Math.max(
+            0,
+            insertionOffset === rubyLength ? rubyLength - 1 : insertionOffset,
+          ),
+          rubyLength - 1,
+        );
+        const insertionRange = document.createRange();
+        insertionRange.setStart(rubyNode, characterOffset);
+        insertionRange.setEnd(rubyNode, characterOffset + 1);
+        const insertionRect = [...insertionRange.getClientRects()].find(
+          visible,
+        );
+        if (!insertionRect) continue;
+        const rect = toPageRect(insertionRect);
+        anchor = {
+          x: rect.x + rect.width,
+          y: insertionOffset === rubyLength ? rect.y + rect.height : rect.y,
+        };
+        targetMarks.push({ type: "insert", rect });
+      } else if (rubyLength > 0 && change.type !== "ruby-add") {
+        const rubyStart = Math.max(
+          0,
+          Math.min(rubyLength, Number(change.rubyStart) || 0),
+        );
+        const rubyEnd = Math.max(
+          rubyStart,
+          Math.min(rubyLength, Number(change.rubyEnd) || rubyLength),
+        );
+        if (rubyEnd <= rubyStart) continue;
+        const oldRubyRange = document.createRange();
+        oldRubyRange.setStart(rubyNode, rubyStart);
+        oldRubyRange.setEnd(rubyNode, rubyEnd);
+        const oldRubyRects = [...oldRubyRange.getClientRects()]
+          .filter(visible)
+          .map(toPageRect);
+        if (!oldRubyRects.length) continue;
+        targetMarks.push(
+          ...oldRubyRects.map((rect) => ({ type: "strike", rect })),
+        );
+        const firstRubyRect = oldRubyRects[0];
+        anchor = {
+          x: firstRubyRect.x + firstRubyRect.width,
+          y: firstRubyRect.y + firstRubyRect.height / 2,
+        };
+      } else {
+        targetMarks.push(...baseRects.map((rect) => ({ type: "base", rect })));
+        const firstBaseRect = baseRects[0];
+        anchor = {
+          x: firstBaseRect.x + firstBaseRect.width + 1,
+          y: firstBaseRect.y + firstBaseRect.height / 2,
+        };
+      }
+
+      const note = document.createElement("span");
+      note.className = `proofread-note proofread-note-${change.type} proofread-note-ruby`;
+      note.textContent = change.note;
+      const noteFontSize = Math.max(8, fontSize * 0.68);
+      const noteWidth = noteFontSize * 1.1;
+      const noteHeight = Math.max(
+        noteFontSize,
+        [...note.textContent].length * noteFontSize,
+      );
+      const gap = Math.max(3, fontSize * 0.18);
+      const step = Math.max(3, fontSize * 0.25);
+      const metrics = {
+        armLength: Math.max(6, fontSize * 0.42),
+        laneOffset: (leaderIndex % 4) * 3,
+      };
+      const rejected = [];
+      let position = null;
+      let rubyLeaderPoints = null;
+      for (let attempt = 0; attempt < 24; attempt++) {
+        const candidate = findProofreadNotePosition({
+          pageWidth: page.offsetWidth,
+          pageHeight: page.offsetHeight,
+          noteWidth,
+          noteHeight,
+          anchor: {
+            x: anchor.x + metrics.armLength + metrics.laneOffset,
+            y: anchor.y,
+          },
+          occupied: [...occupied, ...rejected],
+          gap,
+          step,
+          allowOverlapFallback: false,
+        });
+        if (!candidate) break;
+        const points = proofreadLeaderPoints({
+          anchor,
+          position: candidate,
+          pageHeight: page.offsetHeight,
+          armLength: metrics.armLength,
+          laneOffset: metrics.laneOffset,
+          armDirection: 1,
+        });
+        const crossesAnnotation = leaderBounds(points).some((bounds) =>
+          annotationOccupied.some((rect) => overlaps(bounds, rect, 1)),
+        );
+        if (!crossesAnnotation) {
+          position = candidate;
+          rubyLeaderPoints = points;
+          break;
+        }
+        rejected.push(candidate);
+      }
+      if (!position) {
+        position = findProofreadNotePosition({
+          pageWidth: page.offsetWidth,
+          pageHeight: page.offsetHeight,
+          noteWidth,
+          noteHeight,
+          anchor: {
+            x: anchor.x + metrics.armLength + metrics.laneOffset,
+            y: anchor.y,
+          },
+          occupied,
+          gap,
+          step,
+        });
+        rubyLeaderPoints = proofreadLeaderPoints({
+          anchor,
+          position,
+          pageHeight: page.offsetHeight,
+          armLength: metrics.armLength,
+          laneOffset: metrics.laneOffset,
+          armDirection: 1,
+        });
+      }
+
+      for (const mark of targetMarks) {
+        if (mark.type === "insert") {
+          const arm = Math.max(2, noteFontSize * 0.28);
+          const marker = document.createElementNS(
+            "http://www.w3.org/2000/svg",
+            "polyline",
+          );
+          marker.classList.add(
+            "proofread-insert-caret",
+            "proofread-ruby-insert",
+          );
+          marker.setAttribute(
+            "points",
+            [
+              `${anchor.x + arm},${anchor.y - arm}`,
+              `${anchor.x},${anchor.y}`,
+              `${anchor.x + arm},${anchor.y + arm}`,
+            ].join(" "),
+          );
+          leaderSvg.append(marker);
+          occupyAnnotation({
+            x: anchor.x - 1,
+            y: anchor.y - arm - 1,
+            width: arm + 2,
+            height: arm * 2 + 2,
+          });
+          continue;
+        }
+        const marker = document.createElement("span");
+        marker.className =
+          mark.type === "base"
+            ? "proofread-ruby-base-line"
+            : "proofread-ruby-strike";
+        const markerX =
+          mark.type === "base"
+            ? mark.rect.x + mark.rect.width + 1
+            : mark.rect.x + mark.rect.width / 2;
+        marker.style.top = `${mark.rect.y}px`;
+        marker.style.left = `${markerX}px`;
+        marker.style.height = `${mark.rect.height}px`;
+        layer.append(marker);
+        occupyAnnotation({
+          x: markerX - 1,
+          y: mark.rect.y,
+          width: 3,
+          height: mark.rect.height,
+        });
+      }
+
+      note.style.fontSize = `${noteFontSize}px`;
+      note.style.top = `${position.y}px`;
+      note.style.left = `${position.x}px`;
+      layer.append(note);
+      occupyAnnotation(position);
+      appendRubyLeader(rubyLeaderPoints);
+      continue;
+    }
     const range = document.createRange();
     range.setStart(first.node, Math.max(0, change.start - first.start));
     range.setEnd(
@@ -355,6 +682,12 @@ function positionProofreadNotes(page) {
       strike.style.left = `${(rect.left + rect.width / 2 - pageRect.left) / scaleX}px`;
       strike.style.height = `${rect.height / scaleY}px`;
       layer.append(strike);
+      occupyAnnotation({
+        x: (rect.left + rect.width / 2 - pageRect.left) / scaleX - 1,
+        y: (rect.top - pageRect.top) / scaleY,
+        width: 3,
+        height: rect.height / scaleY,
+      });
     }
     const anchorRect = visibleRects[0];
     if (!anchorRect) continue;
@@ -369,6 +702,15 @@ function positionProofreadNotes(page) {
       note.style.top = `${(anchorRect.top - pageRect.top) / scaleY}px`;
       note.style.left = `${(anchorRect.right - pageRect.left) / scaleX + 2}px`;
       layer.append(note);
+      occupyAnnotation({
+        x: (anchorRect.right - pageRect.left) / scaleX + 2,
+        y: (anchorRect.top - pageRect.top) / scaleY,
+        width: fontSize * 0.55,
+        height: Math.max(
+          fontSize * 0.5,
+          [...change.note].length * fontSize * 0.5,
+        ),
+      });
       continue;
     }
     const anchorPageRect = toPageRect(anchorRect);
@@ -387,7 +729,7 @@ function positionProofreadNotes(page) {
       note.style.top = `${inlinePosition.y}px`;
       note.style.left = `${inlinePosition.x}px`;
       layer.append(note);
-      occupied.push(inlinePosition);
+      occupyAnnotation(inlinePosition);
       const leaderY =
         anchorPageRect.y + Math.min(anchorPageRect.height, fontSize) * 0.5;
       appendStraightLeader(
@@ -423,7 +765,7 @@ function positionProofreadNotes(page) {
     note.style.top = `${position.y}px`;
     note.style.left = `${position.x}px`;
     layer.append(note);
-    occupied.push(position);
+    occupyAnnotation(position);
     appendLeader(anchor, position, {
       metrics,
       armDirection: 1,
