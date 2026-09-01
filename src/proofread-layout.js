@@ -229,3 +229,24 @@ export function proofreadLeaderPoints({
     destination,
   ];
 }
+
+export function rubyBraceGeometry({
+  position,
+  noteWidth,
+  noteHeight,
+  gap = 2,
+  bowWidth = 4,
+}) {
+  const x = position.x + noteWidth + gap;
+  const top = position.y;
+  const bottom = position.y + noteHeight;
+  return {
+    path: `M ${x} ${top} Q ${x + bowWidth} ${(top + bottom) / 2} ${x} ${bottom}`,
+    bounds: {
+      x: x - 1,
+      y: top - 1,
+      width: bowWidth + 2,
+      height: noteHeight + 2,
+    },
+  };
+}

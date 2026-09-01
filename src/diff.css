@@ -517,6 +517,10 @@ body {
   stroke-width: 1.5;
 }
 
+.proofread-ruby-brace {
+  stroke-width: 1.5;
+}
+
 .proofread-strike {
   position: absolute;
   width: 1.5px;

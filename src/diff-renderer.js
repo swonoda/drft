@@ -9,6 +9,7 @@ import {
   findProofreadNotePosition,
   numberLongProofreadNotes,
   proofreadLeaderPoints,
+  rubyBraceGeometry,
 } from "./proofread-layout.js";
 import {
   fixedSpreadPreviewLayout,
@@ -332,6 +333,26 @@ function positionProofreadNotes(page) {
     leaderSvg.append(path);
     for (const bounds of leaderBounds(points)) occupyAnnotation(bounds);
   };
+  const appendRubyBrace = ({
+    position,
+    noteWidth,
+    noteHeight,
+    gap,
+    bowWidth,
+  }) => {
+    const brace = rubyBraceGeometry({
+      position,
+      noteWidth,
+      noteHeight,
+      gap,
+      bowWidth,
+    });
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.classList.add("proofread-ruby-brace");
+    path.setAttribute("d", brace.path);
+    leaderSvg.append(path);
+    occupyAnnotation(brace.bounds);
+  };
   const insertionPoint = (changeOffset) => {
     const item =
       nodes.find(
@@ -545,6 +566,14 @@ function positionProofreadNotes(page) {
         [...note.textContent].length * noteFontSize,
       );
       const gap = Math.max(3, fontSize * 0.18);
+      const usesRubyBrace =
+        change.type === "ruby-replace" ||
+        (change.type === "ruby-add" && rubyLength === 0);
+      const braceGap = Math.max(2, noteFontSize * 0.15);
+      const braceWidth = Math.max(3, noteFontSize * 0.32);
+      const placementWidth = usesRubyBrace
+        ? noteWidth + braceGap + braceWidth + 2
+        : noteWidth;
       const step = Math.max(3, fontSize * 0.25);
       const metrics = {
         armLength: Math.max(6, fontSize * 0.42),
@@ -557,7 +586,7 @@ function positionProofreadNotes(page) {
         const candidate = findProofreadNotePosition({
           pageWidth: page.offsetWidth,
           pageHeight: page.offsetHeight,
-          noteWidth,
+          noteWidth: placementWidth,
           noteHeight,
           anchor: {
             x: anchor.x + metrics.armLength + metrics.laneOffset,
@@ -569,17 +598,21 @@ function positionProofreadNotes(page) {
           allowOverlapFallback: false,
         });
         if (!candidate) break;
-        const points = proofreadLeaderPoints({
-          anchor,
-          position: candidate,
-          pageHeight: page.offsetHeight,
-          armLength: metrics.armLength,
-          laneOffset: metrics.laneOffset,
-          armDirection: 1,
-        });
-        const crossesAnnotation = leaderBounds(points).some((bounds) =>
-          annotationOccupied.some((rect) => overlaps(bounds, rect, 1)),
-        );
+        const points = usesRubyBrace
+          ? null
+          : proofreadLeaderPoints({
+              anchor,
+              position: candidate,
+              pageHeight: page.offsetHeight,
+              armLength: metrics.armLength,
+              laneOffset: metrics.laneOffset,
+              armDirection: 1,
+            });
+        const crossesAnnotation =
+          points &&
+          leaderBounds(points).some((bounds) =>
+            annotationOccupied.some((rect) => overlaps(bounds, rect, 1)),
+          );
         if (!crossesAnnotation) {
           position = candidate;
           rubyLeaderPoints = points;
@@ -591,7 +624,7 @@ function positionProofreadNotes(page) {
         position = findProofreadNotePosition({
           pageWidth: page.offsetWidth,
           pageHeight: page.offsetHeight,
-          noteWidth,
+          noteWidth: placementWidth,
           noteHeight,
           anchor: {
             x: anchor.x + metrics.armLength + metrics.laneOffset,
@@ -601,14 +634,16 @@ function positionProofreadNotes(page) {
           gap,
           step,
         });
-        rubyLeaderPoints = proofreadLeaderPoints({
-          anchor,
-          position,
-          pageHeight: page.offsetHeight,
-          armLength: metrics.armLength,
-          laneOffset: metrics.laneOffset,
-          armDirection: 1,
-        });
+        if (!usesRubyBrace) {
+          rubyLeaderPoints = proofreadLeaderPoints({
+            anchor,
+            position,
+            pageHeight: page.offsetHeight,
+            armLength: metrics.armLength,
+            laneOffset: metrics.laneOffset,
+            armDirection: 1,
+          });
+        }
       }
 
       for (const mark of targetMarks) {
@@ -665,7 +700,17 @@ function positionProofreadNotes(page) {
       note.style.left = `${position.x}px`;
       layer.append(note);
       occupyAnnotation(position);
-      appendRubyLeader(rubyLeaderPoints);
+      if (usesRubyBrace) {
+        appendRubyBrace({
+          position,
+          noteWidth,
+          noteHeight,
+          gap: braceGap,
+          bowWidth: braceWidth,
+        });
+      } else {
+        appendRubyLeader(rubyLeaderPoints);
+      }
       continue;
     }
     const range = document.createRange();
@@ -1202,7 +1247,7 @@ function buildProofPdfHtml(settings) {
       padding: 0;
     }
   `;
-  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
+  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.rubyBraceGeometry=${rubyBraceGeometry.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
   const documentHtml = (contents, includeProofreadScript = false) =>
     `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${contents.outerHTML}${includeProofreadScript ? proofreadScript : ""}</body></html>`;
   return {

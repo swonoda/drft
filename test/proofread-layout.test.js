@@ -6,6 +6,7 @@ import {
   findProofreadNotePosition,
   numberLongProofreadNotes,
   proofreadLeaderPoints,
+  rubyBraceGeometry,
 } from "../src/proofread-layout.js";
 
 test("本文領域内を含む最寄りの空白へ校正文字を置く", () => {
@@ -212,5 +213,21 @@ test("置換の引出線は右の行間へ出たあと注記まで接続する",
       { x: 58, y: 75 },
       { x: 50, y: 75 },
     ],
+  );
+});
+
+test("縦組みルビの弧は読みの右隣へ上から下まで描く", () => {
+  assert.deepEqual(
+    rubyBraceGeometry({
+      position: { x: 20, y: 30 },
+      noteWidth: 10,
+      noteHeight: 40,
+      gap: 2,
+      bowWidth: 4,
+    }),
+    {
+      path: "M 32 30 Q 36 50 32 70",
+      bounds: { x: 31, y: 29, width: 6, height: 42 },
+    },
   );
 });
