@@ -406,6 +406,8 @@ function buildProofreadChanges(left, right) {
     rightDocument.text,
   ).map((change) => ({
     ...change,
+    visibleStart: change.start,
+    visibleEnd: change.end,
     start: leftDocument.boundaries[change.start] ?? change.start,
     end: leftDocument.boundaries[change.end] ?? change.end,
   }));
@@ -434,6 +436,12 @@ function buildProofreadChanges(left, right) {
     if (rightAnnotation) {
       matchedRight.add(rightDocument.annotations.indexOf(rightAnnotation));
     }
+    if (
+      !rightAnnotation &&
+      rightDocument.text.slice(rightStart, rightEnd) !== leftAnnotation.base
+    ) {
+      continue;
+    }
     changes.push(
       ...rubyReadingChanges(leftAnnotation, rightAnnotation, {
         start: leftAnnotation.rawBaseStart,
@@ -448,6 +456,21 @@ function buildProofreadChanges(left, right) {
     const leftEnd = rightToLeft.get(rightAnnotation.visibleEnd);
     if (!Number.isInteger(leftStart) || !Number.isInteger(leftEnd)) return;
     if (leftDocument.text.slice(leftStart, leftEnd) !== rightAnnotation.base) {
+      const relatedChanges = changes.filter(
+        (change) =>
+          Number.isInteger(change.visibleStart) &&
+          Number.isInteger(change.visibleEnd) &&
+          change.visibleStart < leftEnd &&
+          change.visibleEnd > leftStart,
+      );
+      if (relatedChanges.length === 1) {
+        Object.assign(relatedChanges[0], {
+          rubyReading: rightAnnotation.reading,
+          rubyBase: rightAnnotation.base,
+          rubyAnchorStart: leftDocument.boundaries[leftStart] ?? leftStart,
+          rubyAnchorEnd: leftDocument.boundaries[leftEnd] ?? leftEnd,
+        });
+      }
       return;
     }
     changes.push(
@@ -465,7 +488,10 @@ function buildProofreadChanges(left, right) {
         leftChange.end - rightChange.end ||
         Number(leftChange.rubyStart || 0) - Number(rightChange.rubyStart || 0),
     )
-    .map((change, index) => ({ id: index + 1, ...change }));
+    .map((change, index) => {
+      const { visibleStart, visibleEnd, ...result } = change;
+      return { id: index + 1, ...result };
+    });
 }
 
 module.exports = {

@@ -250,3 +250,54 @@ export function rubyBraceGeometry({
     },
   };
 }
+
+export function compoundRubyGeometry({
+  parentRects,
+  replacementPosition,
+  readingWidth,
+  readingHeight,
+  gap = 2,
+  lineOffset = 2,
+  braceGap = 2,
+  bowWidth = 4,
+}) {
+  const parentTop = Math.min(...parentRects.map((rect) => rect.y));
+  const parentBottom = Math.max(
+    ...parentRects.map((rect) => rect.y + rect.height),
+  );
+  const parentRight = Math.max(
+    ...parentRects.map((rect) => rect.x + rect.width),
+  );
+  const replacementRight = replacementPosition.x + replacementPosition.width;
+  const lineX = Math.max(parentRight, replacementRight) + lineOffset;
+  const top = Math.min(parentTop, replacementPosition.y);
+  const bottom = Math.max(
+    parentBottom,
+    replacementPosition.y + replacementPosition.height,
+  );
+  const reading = {
+    x: lineX + gap,
+    y: top + Math.max(0, (bottom - top - readingHeight) / 2),
+    width: readingWidth,
+    height: readingHeight,
+  };
+  const brace = rubyBraceGeometry({
+    position: reading,
+    noteWidth: readingWidth,
+    noteHeight: readingHeight,
+    gap: braceGap,
+    bowWidth,
+  });
+  return {
+    line: { x: lineX, y: top, width: 2, height: bottom - top },
+    reading,
+    brace,
+    bounds: {
+      x: lineX - 1,
+      y: top - 1,
+      width: brace.bounds.x + brace.bounds.width - (lineX - 1),
+      height:
+        Math.max(bottom, brace.bounds.y + brace.bounds.height) - (top - 1),
+    },
+  };
+}

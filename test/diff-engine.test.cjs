@@ -259,6 +259,29 @@ test("明示的なルビ記法の後にある本文変更も元原稿位置を�
   ]);
 });
 
+test("本文置換を含む明示ルビは置換と一つの複合変更にする", () => {
+  assert.deepEqual(
+    buildProofreadChanges(
+      "汎用補佐インタフェイスのジーだ。",
+      "｜汎用補佐エージェント《ＧＳＡ》のジーだ。",
+    ),
+    [
+      {
+        id: 1,
+        start: 4,
+        end: 11,
+        removed: "インタフェイス",
+        replacement: "エージェント",
+        type: "replace",
+        rubyReading: "ＧＳＡ",
+        rubyBase: "汎用補佐エージェント",
+        rubyAnchorStart: 0,
+        rubyAnchorEnd: 11,
+      },
+    ],
+  );
+});
+
 test("文中への追加は前後の文字間を挿入位置にする", () => {
   assert.deepEqual(
     buildProofreadChanges(

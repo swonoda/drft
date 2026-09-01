@@ -4,6 +4,7 @@ import {
   renderPreviewDocument,
 } from "./parser.js";
 import {
+  compoundRubyGeometry,
   findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
@@ -123,20 +124,34 @@ function visibleProofreadChanges(text, changes) {
   const normalized = text.replaceAll("\r\n", "\n");
   return numberLongProofreadNotes(
     changes
-      .map((change) => ({
-        ...change,
-        start: manuscriptText(normalized.slice(0, change.start)).length,
-        end: manuscriptText(normalized.slice(0, change.end)).length,
-        note:
-          change.type === "ruby-delete"
-            ? "トル"
-            : change.type === "replace" ||
-                change.type === "add" ||
-                change.type === "ruby-replace" ||
-                change.type === "ruby-add"
-              ? manuscriptTextWithLineBreaks(change.replacement || "")
-              : "トル",
-      }))
+      .map((change) => {
+        const visibleChange = {
+          ...change,
+          start: manuscriptText(normalized.slice(0, change.start)).length,
+          end: manuscriptText(normalized.slice(0, change.end)).length,
+          note:
+            change.type === "ruby-delete"
+              ? "トル"
+              : change.type === "replace" ||
+                  change.type === "add" ||
+                  change.type === "ruby-replace" ||
+                  change.type === "ruby-add"
+                ? manuscriptTextWithLineBreaks(change.replacement || "")
+                : "トル",
+        };
+        if (
+          Number.isInteger(change.rubyAnchorStart) &&
+          Number.isInteger(change.rubyAnchorEnd)
+        ) {
+          visibleChange.rubyAnchorStart = manuscriptText(
+            normalized.slice(0, change.rubyAnchorStart),
+          ).length;
+          visibleChange.rubyAnchorEnd = manuscriptText(
+            normalized.slice(0, change.rubyAnchorEnd),
+          ).length;
+        }
+        return visibleChange;
+      })
       .filter(
         (change) =>
           change.note && (change.type === "add" || change.end > change.start),
@@ -352,6 +367,106 @@ function positionProofreadNotes(page) {
     path.setAttribute("d", brace.path);
     leaderSvg.append(path);
     occupyAnnotation(brace.bounds);
+  };
+  const appendCompoundRuby = ({ change, replacementPosition, fontSize }) => {
+    if (
+      !change.rubyReading ||
+      !Number.isInteger(change.rubyAnchorStart) ||
+      !Number.isInteger(change.rubyAnchorEnd)
+    ) {
+      return;
+    }
+    const rubyFirst = nodes.find((item) => change.rubyAnchorStart < item.end);
+    const rubyLast = [...nodes]
+      .reverse()
+      .find((item) => change.rubyAnchorEnd > item.start);
+    if (!rubyFirst || !rubyLast) return;
+    const parentRange = document.createRange();
+    parentRange.setStart(
+      rubyFirst.node,
+      Math.max(0, change.rubyAnchorStart - rubyFirst.start),
+    );
+    parentRange.setEnd(
+      rubyLast.node,
+      Math.min(
+        rubyLast.node.data.length,
+        change.rubyAnchorEnd - rubyLast.start,
+      ),
+    );
+    const parentRects = [...parentRange.getClientRects()]
+      .filter(visible)
+      .map(toPageRect);
+    if (!parentRects.length) return;
+
+    const readingFontSize = Math.max(8, fontSize * 0.55);
+    const readingWidth = readingFontSize * 1.1;
+    const readingHeight = Math.max(
+      readingFontSize,
+      [...change.rubyReading].length * readingFontSize,
+    );
+    const gap = Math.max(2, fontSize * 0.12);
+    const braceGap = Math.max(2, readingFontSize * 0.15);
+    const bowWidth = Math.max(3, readingFontSize * 0.32);
+    const step = Math.max(3, fontSize * 0.22);
+    let geometry = null;
+    for (let attempt = 0; attempt < 24; attempt++) {
+      const candidate = compoundRubyGeometry({
+        parentRects,
+        replacementPosition,
+        readingWidth,
+        readingHeight,
+        gap,
+        lineOffset: gap + attempt * step,
+        braceGap,
+        bowWidth,
+      });
+      const withinPage =
+        candidate.bounds.x >= 0 &&
+        candidate.bounds.y >= 0 &&
+        candidate.bounds.x + candidate.bounds.width <= page.offsetWidth &&
+        candidate.bounds.y + candidate.bounds.height <= page.offsetHeight;
+      const available = occupied.every(
+        (rect) => !overlaps(candidate.bounds, rect, 1),
+      );
+      if (withinPage && available) {
+        geometry = candidate;
+        break;
+      }
+    }
+    geometry ||= compoundRubyGeometry({
+      parentRects,
+      replacementPosition,
+      readingWidth,
+      readingHeight,
+      gap,
+      lineOffset: gap,
+      braceGap,
+      bowWidth,
+    });
+
+    const line = document.createElement("span");
+    line.className = "proofread-ruby-compound-line";
+    line.style.left = `${geometry.line.x}px`;
+    line.style.top = `${geometry.line.y}px`;
+    line.style.height = `${geometry.line.height}px`;
+    layer.append(line);
+    occupyAnnotation(geometry.line);
+
+    const reading = document.createElement("span");
+    reading.className = "proofread-note proofread-note-ruby";
+    reading.textContent = change.rubyReading;
+    reading.style.fontSize = `${readingFontSize}px`;
+    reading.style.left = `${geometry.reading.x}px`;
+    reading.style.top = `${geometry.reading.y}px`;
+    layer.append(reading);
+    occupyAnnotation(geometry.reading);
+    appendRubyBrace({
+      position: geometry.reading,
+      noteWidth: readingWidth,
+      noteHeight: readingHeight,
+      gap: braceGap,
+      bowWidth,
+    });
   };
   const insertionPoint = (changeOffset) => {
     const item =
@@ -787,6 +902,11 @@ function positionProofreadNotes(page) {
           y: leaderY,
         },
       );
+      appendCompoundRuby({
+        change,
+        replacementPosition: inlinePosition,
+        fontSize,
+      });
       continue;
     }
 
@@ -814,6 +934,11 @@ function positionProofreadNotes(page) {
     appendLeader(anchor, position, {
       metrics,
       armDirection: 1,
+    });
+    appendCompoundRuby({
+      change,
+      replacementPosition: position,
+      fontSize,
     });
   }
   page.append(layer);
@@ -1247,7 +1372,7 @@ function buildProofPdfHtml(settings) {
       padding: 0;
     }
   `;
-  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.rubyBraceGeometry=${rubyBraceGeometry.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
+  const proofreadScript = `<script>window.findInlineProofreadPosition=${findInlineProofreadPosition.toString()};window.findProofreadNotePosition=${findProofreadNotePosition.toString()};window.findProofreadBlockPosition=${findProofreadBlockPosition.toString()};window.proofreadLeaderPoints=${proofreadLeaderPoints.toString()};window.rubyBraceGeometry=${rubyBraceGeometry.toString()};window.compoundRubyGeometry=${compoundRubyGeometry.toString()};window.positionProofreadNotes=${positionProofreadNotes.toString()};<\/script>`;
   const documentHtml = (contents, includeProofreadScript = false) =>
     `<!doctype html><html lang="ja"><head><meta charset="utf-8"><style>${stylesheetText()}${printCss}</style></head><body>${contents.outerHTML}${includeProofreadScript ? proofreadScript : ""}</body></html>`;
   return {

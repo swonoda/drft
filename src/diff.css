@@ -529,7 +529,8 @@ body {
 }
 
 .proofread-ruby-base-line,
-.proofread-ruby-strike {
+.proofread-ruby-strike,
+.proofread-ruby-compound-line {
   position: absolute;
   width: 1.5px;
   border-radius: 1px;

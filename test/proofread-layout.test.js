@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  compoundRubyGeometry,
   findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
@@ -228,6 +229,30 @@ test("縦組みルビの弧は読みの右隣へ上から下まで描く", () =>
     {
       path: "M 32 30 Q 36 50 32 70",
       bounds: { x: 31, y: 29, width: 6, height: 42 },
+    },
+  );
+});
+
+test("本文置換と同じ場所のルビ線は旧語と置換語の両方を含む", () => {
+  assert.deepEqual(
+    compoundRubyGeometry({
+      parentRects: [{ x: 20, y: 10, width: 10, height: 70 }],
+      replacementPosition: { x: 34, y: 40, width: 10, height: 50 },
+      readingWidth: 6,
+      readingHeight: 18,
+      gap: 3,
+      lineOffset: 2,
+      braceGap: 2,
+      bowWidth: 4,
+    }),
+    {
+      line: { x: 46, y: 10, width: 2, height: 80 },
+      reading: { x: 49, y: 41, width: 6, height: 18 },
+      brace: {
+        path: "M 57 41 Q 61 50 57 59",
+        bounds: { x: 56, y: 40, width: 6, height: 20 },
+      },
+      bounds: { x: 45, y: 9, width: 17, height: 81 },
     },
   );
 });
