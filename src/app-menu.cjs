@@ -140,6 +140,13 @@ function installApplicationMenu({
           label: "組版を調整…",
           click: () => sendMenuCommand("adjust-layout"),
         },
+        { type: "separator" },
+        {
+          role: "toggleDevTools",
+          label: "開発者ツール",
+          accelerator:
+            process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
+        },
       ],
     },
     {
