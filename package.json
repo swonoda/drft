@@ -1,6 +1,6 @@
 {
   "name": "ryuhyo-editor",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "横書きで書き、縦書きで確かめる小説エディタ",
   "license": "MIT",
   "main": "src/main.cjs",
@@ -37,7 +37,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules/node-poppler-win32/**/*"
+      "node_modules/node-poppler-win32/**/*",
+      "src/*.py"
     ],
     "win": {
       "icon": "build/icon.ico",
