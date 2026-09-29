@@ -1,3 +1,4 @@
+const { unpackedAsarPath } = require("./packaged-path.cjs");
 const fs = require("node:fs");
 const fsPromises = require("node:fs/promises");
 const os = require("node:os");
@@ -59,7 +60,7 @@ class PaddleProofOcrSession {
       let settled = false;
       const child = spawn(
         resolvePython(),
-        [path.join(__dirname, "proof-ocr-paddle.py")],
+        [unpackedAsarPath(path.join(__dirname, "proof-ocr-paddle.py"))],
         {
           windowsHide: true,
           stdio: ["pipe", "pipe", "pipe"],

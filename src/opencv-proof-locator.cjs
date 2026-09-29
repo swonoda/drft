@@ -1,3 +1,4 @@
+const { unpackedAsarPath } = require("./packaged-path.cjs");
 const fs = require("node:fs");
 const fsPromises = require("node:fs/promises");
 const os = require("node:os");
@@ -61,7 +62,9 @@ async function locateProofMarks(pngBuffer, { words = [] } = {}) {
       fsPromises.writeFile(requestPath, JSON.stringify({ words }), "utf8"),
     ]);
     const python = resolveOpenCvPython();
-    const script = path.join(__dirname, "proof-location-opencv.py");
+    const script = unpackedAsarPath(
+      path.join(__dirname, "proof-location-opencv.py"),
+    );
     const { stdout, stderr } = await execFileAsync(
       python,
       [script, imagePath, requestPath],
