@@ -393,28 +393,33 @@ aside {
   padding: 28px;
   background: var(--paper);
 }
-textarea {
-  display: block;
+#editor,
+#editor .cm-editor {
   width: 100%;
   height: 100%;
-  margin: 0;
-  resize: none;
-  border: 0;
-  outline: 0;
-  padding-top: var(--vertical-margin);
-  padding-right: max(var(--editor-horizontal-margin), calc((100% - 900px) / 2));
-  padding-bottom: var(--vertical-margin);
-  padding-left: max(var(--editor-horizontal-margin), calc((100% - 900px) / 2));
+  min-height: 0;
+  color: var(--ink);
+  background: var(--paper);
+}
+#editor .cm-editor.cm-focused {
+  outline: none;
+}
+#editor .cm-scroller {
+  overflow: auto;
   font-family: var(--font);
   font-size: var(--size);
   line-height: var(--lh);
   letter-spacing: var(--ls);
-  color: var(--ink);
-  background: var(--paper);
-  box-shadow: none;
-  tab-size: 4;
 }
-textarea::selection {
+#editor .cm-content {
+  padding: var(--vertical-margin) 0;
+  caret-color: var(--ink);
+}
+#editor .cm-line {
+  padding: 0 max(var(--editor-horizontal-margin), calc((100% - 900px) / 2));
+}
+#editor .cm-content ::selection,
+#editor .cm-content::selection {
   background: #dfeafa;
   color: #2f4162;
 }

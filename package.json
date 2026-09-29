@@ -10,11 +10,19 @@
     "test": "node --test",
     "proof:setup": "node scripts/setup-ocr.cjs",
     "ocr:setup": "npm run proof:setup",
-    "dist:win": "electron-builder --win nsis portable"
+    "dist:win": "electron-builder --win nsis portable",
+    "build:editor": "node scripts/build-editor.mjs",
+    "prestart": "npm run build:editor",
+    "predist:win": "npm run build:editor",
+    "test:editor": "npm run build:editor && node scripts/verify-editor-browser.mjs",
+    "pretest": "npm run build:editor"
   },
   "devDependencies": {
     "electron": "^43.1.0",
     "electron-builder": "^26.0.12",
+    "esbuild": "0.28.2",
+    "jsdom": "26.1.0",
+    "playwright": "1.55.1",
     "prettier": "^3.9.5"
   },
   "build": {
@@ -47,6 +55,9 @@
     }
   },
   "dependencies": {
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
     "diff": "^8.0.4",
     "iconv-lite": "^0.7.3",
     "jszip": "^3.10.1",
