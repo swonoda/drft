@@ -1,5 +1,4 @@
 import { createManuscriptEditor } from "./generated/editor.js";
-import { createInputDiagnostics } from "./input-diagnostics.js";
 import {
   parseDocument,
   renderBody,
@@ -28,7 +27,6 @@ const editor = createManuscriptEditor($("editor"), {
   outline = $("outline"),
   fixList = $("fixList"),
   state = $("state");
-const diagnostics = createInputDiagnostics(editor.contentDOM);
 let filePath = null,
   encoding = "utf8",
   dirty = false,
@@ -52,25 +50,17 @@ function updateCharacterCount() {
     `${count.toLocaleString("ja-JP")}字　原稿用紙 ${sheets.toLocaleString("ja-JP")}枚`;
 }
 function update() {
-  const updateTrace = diagnostics.begin();
-  const doc = diagnostics.measure("全文解析", () =>
-    parseDocument(editor.value),
-  );
+  const doc = parseDocument(editor.value);
   document.title = `${doc.title.trim() || "無題"} — DRFT`;
-  const fixes = diagnostics.measure("Fix検索", () =>
-    findFixMarks(editor.value),
-  );
+  const fixes = findFixMarks(editor.value);
   const previewOpen = $("previewPane").classList.contains("open");
   if (previewOpen) {
-    const previewTrace = diagnostics.begin();
     previewContent.innerHTML = renderPreviewDocument(
       editor.value,
       editor.selectionStart,
     );
     installPreviewCaretAnchor();
-    diagnostics.end("プレビュー生成・DOM更新", previewTrace);
   }
-  const outlineTrace = diagnostics.begin();
   outline.replaceChildren();
   let chapterSeen = false;
   doc.sections.forEach((item, index) => {
@@ -100,8 +90,6 @@ function update() {
     });
     outline.append(el);
   });
-  diagnostics.end("目次DOM更新", outlineTrace);
-  const fixTrace = diagnostics.begin();
   fixList.replaceChildren();
   fixes.forEach((fix, index) => {
     const el = document.createElement("button");
@@ -121,10 +109,8 @@ function update() {
     fixList.append(empty);
   }
   $("fixBadge").textContent = fixes.length;
-  diagnostics.end("Fix一覧DOM更新", fixTrace);
   if (previewOpen) requestAnimationFrame(syncPreviewToCaret);
-  diagnostics.measure("文字数・枚数", updateCharacterCount);
-  diagnostics.end("表示更新合計（JS）", updateTrace);
+  updateCharacterCount();
 }
 function showSideView(view) {
   const fixes = view === "fix";
@@ -157,12 +143,6 @@ function updatePageState() {
   $("pageForward").disabled = currentPage >= count - 1;
 }
 function syncPreviewToCaret() {
-  return diagnostics.measure(
-    "プレビューレイアウト同期",
-    syncPreviewToCaretImpl,
-  );
-}
-function syncPreviewToCaretImpl() {
   previewContent.style.transform = "translateX(0)";
   const marker = previewContent.querySelector(
     ".preview-caret-anchor, .preview-highlight",
@@ -183,13 +163,11 @@ function cursorMoved() {
   if (!$("previewPane").classList.contains("open")) return;
   cancelAnimationFrame(cursorFrame);
   cursorFrame = requestAnimationFrame(() => {
-    const previewTrace = diagnostics.begin();
     previewContent.innerHTML = renderPreviewDocument(
       editor.value,
       editor.selectionStart,
     );
     installPreviewCaretAnchor();
-    diagnostics.end("プレビュー生成・DOM更新", previewTrace);
     requestAnimationFrame(syncPreviewToCaret);
   });
 }
@@ -268,7 +246,6 @@ async function autoSave() {
   if (!dirty || !filePath || composing) return;
   const savedRevision = revision;
   const generation = documentGeneration;
-  const saveTrace = diagnostics.begin();
   try {
     await window.desktop.save(editor.value, encoding);
     if (generation === documentGeneration && savedRevision === revision) {
@@ -278,8 +255,6 @@ async function autoSave() {
   } catch (error) {
     if (generation === documentGeneration)
       setState(`自動保存できません: ${error.message}`);
-  } finally {
-    diagnostics.end("自動保存（IPC待ちを含む）", saveTrace);
   }
 }
 editor.contentDOM.addEventListener(
