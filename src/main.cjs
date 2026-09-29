@@ -52,6 +52,19 @@ function sendMenuCommand(command) {
   if (win && !win.isDestroyed()) win.webContents.send("menu:command", command);
 }
 
+function editFocusedDocument(command) {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (!focused) return;
+  if (focused === win && !focused.webContents.isDevToolsFocused()) {
+    sendMenuCommand(command);
+  } else {
+    const contents = focused.webContents.isDevToolsFocused()
+      ? focused.webContents.devToolsWebContents
+      : focused.webContents;
+    contents?.[command]();
+  }
+}
+
 function saveFocusedDocument() {
   const focused = BrowserWindow.getFocusedWindow();
   if (dictionaryWin && focused === dictionaryWin) {
@@ -156,6 +169,7 @@ app.whenReady().then(async () => {
   installApplicationMenu({
     sendMenuCommand,
     saveFocusedDocument,
+    editFocusedDocument,
     openDictionaryWindow,
   });
   splashWin = createSplashWindow();

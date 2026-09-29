@@ -1,4 +1,4 @@
-import { createInputDiagnostics } from "./input-diagnostics.js";
+import { createManuscriptEditor } from "./generated/editor.js";
 import {
   parseDocument,
   renderBody,
@@ -18,16 +18,21 @@ import {
 import { buildEpubBook } from "./epub.js";
 import { createPdfExportSettingsController } from "./pdf-export-settings.js";
 const $ = (id) => document.getElementById(id);
-const editor = $("editor"),
+const editor = createManuscriptEditor($("editor"), {
+    onChange: changed,
+    onSelection: cursorMoved,
+  }),
   preview = $("preview"),
   previewContent = $("previewContent"),
   outline = $("outline"),
   fixList = $("fixList"),
   state = $("state");
-const diagnostics = createInputDiagnostics(editor);
 let filePath = null,
   encoding = "utf8",
   dirty = false,
+  revision = 0,
+  documentGeneration = 0,
+  composing = false,
   renderTimer,
   saveTimer,
   cursorFrame,
@@ -45,21 +50,17 @@ function updateCharacterCount() {
     `${count.toLocaleString("ja-JP")}字　原稿用紙 ${sheets.toLocaleString("ja-JP")}枚`;
 }
 function update() {
-  const updateTrace = diagnostics.begin();
-  const doc = diagnostics.measure("全文解析", () => parseDocument(editor.value));
+  const doc = parseDocument(editor.value);
   document.title = `${doc.title.trim() || "無題"} — DRFT`;
-  const fixes = diagnostics.measure("Fix検索", () => findFixMarks(editor.value));
+  const fixes = findFixMarks(editor.value);
   const previewOpen = $("previewPane").classList.contains("open");
   if (previewOpen) {
-    const previewTrace = diagnostics.begin();
     previewContent.innerHTML = renderPreviewDocument(
       editor.value,
       editor.selectionStart,
     );
     installPreviewCaretAnchor();
-    diagnostics.end("プレビュー生成・DOM更新", previewTrace);
   }
-  const outlineTrace = diagnostics.begin();
   outline.replaceChildren();
   let chapterSeen = false;
   doc.sections.forEach((item, index) => {
@@ -89,8 +90,6 @@ function update() {
     });
     outline.append(el);
   });
-  diagnostics.end("目次DOM更新", outlineTrace);
-  const fixTrace = diagnostics.begin();
   fixList.replaceChildren();
   fixes.forEach((fix, index) => {
     const el = document.createElement("button");
@@ -110,10 +109,8 @@ function update() {
     fixList.append(empty);
   }
   $("fixBadge").textContent = fixes.length;
-  diagnostics.end("Fix一覧DOM更新", fixTrace);
   if (previewOpen) requestAnimationFrame(syncPreviewToCaret);
-  diagnostics.measure("文字数・枚数", updateCharacterCount);
-  diagnostics.end("表示更新合計（JS）", updateTrace);
+  updateCharacterCount();
 }
 function showSideView(view) {
   const fixes = view === "fix";
@@ -146,9 +143,6 @@ function updatePageState() {
   $("pageForward").disabled = currentPage >= count - 1;
 }
 function syncPreviewToCaret() {
-  return diagnostics.measure("プレビューレイアウト同期", syncPreviewToCaretImpl);
-}
-function syncPreviewToCaretImpl() {
   previewContent.style.transform = "translateX(0)";
   const marker = previewContent.querySelector(
     ".preview-caret-anchor, .preview-highlight",
@@ -165,16 +159,15 @@ function syncPreviewToCaretImpl() {
   showCurrentPage();
 }
 function cursorMoved() {
+  if (composing) return;
   if (!$("previewPane").classList.contains("open")) return;
   cancelAnimationFrame(cursorFrame);
   cursorFrame = requestAnimationFrame(() => {
-    const previewTrace = diagnostics.begin();
     previewContent.innerHTML = renderPreviewDocument(
       editor.value,
       editor.selectionStart,
     );
     installPreviewCaretAnchor();
-    diagnostics.end("プレビュー生成・DOM更新", previewTrace);
     requestAnimationFrame(syncPreviewToCaret);
   });
 }
@@ -209,95 +202,79 @@ function installPreviewCaretAnchor() {
   highlight.append(anchor);
 }
 function revealEditorPosition(start, end = start) {
-  const style = getComputedStyle(editor);
-  const mirror = document.createElement("div");
-  const properties = [
-    "boxSizing",
-    "fontFamily",
-    "fontSize",
-    "fontStyle",
-    "fontWeight",
-    "letterSpacing",
-    "lineHeight",
-    "paddingTop",
-    "paddingRight",
-    "paddingBottom",
-    "paddingLeft",
-    "borderTopWidth",
-    "borderRightWidth",
-    "borderBottomWidth",
-    "borderLeftWidth",
-    "tabSize",
-    "textIndent",
-    "textTransform",
-    "wordSpacing",
-  ];
-  Object.assign(mirror.style, {
-    position: "fixed",
-    left: "-100000px",
-    top: "0",
-    width: `${editor.clientWidth}px`,
-    height: "auto",
-    visibility: "hidden",
-    whiteSpace: "pre-wrap",
-    overflowWrap: "break-word",
-    wordBreak: "normal",
-  });
-  for (const property of properties) mirror.style[property] = style[property];
-  mirror.append(document.createTextNode(editor.value.slice(0, start)));
-  const marker = document.createElement("span");
-  marker.textContent =
-    editor.value.slice(start, Math.max(start + 1, end)) || "\u200b";
-  mirror.append(marker);
-  document.body.append(mirror);
-  const targetTop = marker.offsetTop;
-  mirror.remove();
-
-  editor.setSelectionRange(start, end);
-  editor.focus({ preventScroll: true });
-  editor.scrollTop = Math.max(0, targetTop - editor.clientHeight / 3);
+  editor.reveal(start, end);
 }
+
 function goToPage(page) {
   currentPage = Math.max(0, Math.min(page, pageCount() - 1));
   showCurrentPage();
 }
 function jumpToLine(line) {
-  const lines = editor.value.split("\n");
-  let p = 0;
-  for (let i = 0; i < line; i++) p += lines[i].length + 1;
-  revealEditorPosition(p);
+  revealEditorPosition(editor.lineStart(line));
 }
+
 function moveParagraph(from, to, after = false) {
   const doc = parseDocument(editor.value);
   const moved = moveParagraphSection(doc, from, to, after);
   if (moved === null) return;
   editor.value = moved;
-  changed();
 }
-function changed() {
-  dirty = true;
-  setState(filePath ? `未保存 — ${filePath}` : "未保存 — 新規");
+function scheduleUpdates() {
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(update, 180);
   clearTimeout(saveTimer);
+  if (composing) return;
+  renderTimer = setTimeout(update, 180);
   saveTimer = setTimeout(autoSave, 1200);
 }
+function changed() {
+  revision++;
+  dirty = true;
+  setState(filePath ? `未保存 — ${filePath}` : "未保存 — 新規");
+  scheduleUpdates();
+}
+function loadEditorDocument(text) {
+  clearTimeout(renderTimer);
+  clearTimeout(saveTimer);
+  cancelAnimationFrame(cursorFrame);
+  documentGeneration++;
+  revision++;
+  composing = false;
+  editor.loadDocument(text);
+  dirty = false;
+}
 async function autoSave() {
-  if (dirty && filePath) {
-    const saveTrace = diagnostics.begin();
-    try {
-      await window.desktop.save(editor.value, encoding);
-    } finally {
-      diagnostics.end("自動保存（IPC待ちを含む）", saveTrace);
+  if (!dirty || !filePath || composing) return;
+  const savedRevision = revision;
+  const generation = documentGeneration;
+  try {
+    await window.desktop.save(editor.value, encoding);
+    if (generation === documentGeneration && savedRevision === revision) {
+      dirty = false;
+      setState(`自動保存済み — ${filePath}`);
     }
-    dirty = false;
-    setState(`自動保存済み — ${filePath}`);
+  } catch (error) {
+    if (generation === documentGeneration)
+      setState(`自動保存できません: ${error.message}`);
   }
 }
-editor.addEventListener("input", changed);
-editor.addEventListener("select", cursorMoved);
-editor.addEventListener("click", cursorMoved);
-editor.addEventListener("keyup", cursorMoved);
+editor.contentDOM.addEventListener(
+  "compositionstart",
+  () => {
+    composing = true;
+    clearTimeout(renderTimer);
+    clearTimeout(saveTimer);
+    cancelAnimationFrame(cursorFrame);
+  },
+  { capture: true },
+);
+editor.contentDOM.addEventListener(
+  "compositionend",
+  () => {
+    composing = false;
+    if (dirty) scheduleUpdates();
+  },
+  { capture: true },
+);
 $("outlineTab").onclick = () => showSideView("outline");
 $("fixTab").onclick = () => showSideView("fix");
 $("encoding").onchange = () => {
@@ -311,9 +288,9 @@ async function loadInitialDocument() {
     filePath = restored.path;
     encoding = restored.encoding;
     $("encoding").value = encoding;
-    editor.value = restored.text;
+    loadEditorDocument(restored.text);
   } else {
-    editor.value = await window.desktop.defaultDocument();
+    loadEditorDocument(await window.desktop.defaultDocument());
   }
   editor.setSelectionRange(0, 0);
   update();
@@ -328,7 +305,7 @@ async function newDocument() {
   filePath = null;
   encoding = "utf8";
   $("encoding").value = encoding;
-  editor.value = "";
+  loadEditorDocument("");
   dirty = false;
   currentPage = 0;
   update();
@@ -343,28 +320,34 @@ async function openDocument() {
     filePath = r.path;
     encoding = r.encoding;
     $("encoding").value = encoding;
-    editor.value = r.text;
+    loadEditorDocument(r.text);
     dirty = false;
     update();
     setState(filePath);
   }
 }
 async function saveDocument() {
+  const savedRevision = revision;
+  const generation = documentGeneration;
   let p = filePath
     ? await window.desktop.save(editor.value, encoding)
     : await window.desktop.saveAs(editor.value, encoding);
-  if (p) {
+  if (p && generation === documentGeneration) {
     filePath = p;
-    dirty = false;
-    setState(`保存済み — ${p}`);
+    dirty = savedRevision !== revision;
+    setState(`${dirty ? "未保存" : "保存済み"} — ${p}`);
+    if (dirty) scheduleUpdates();
   }
 }
 async function saveDocumentAs() {
+  const savedRevision = revision;
+  const generation = documentGeneration;
   const p = await window.desktop.saveAs(editor.value, encoding);
-  if (p) {
+  if (p && generation === documentGeneration) {
     filePath = p;
-    dirty = false;
-    setState(`保存済み — ${p}`);
+    dirty = savedRevision !== revision;
+    setState(`${dirty ? "未保存" : "保存済み"} — ${p}`);
+    if (dirty) scheduleUpdates();
   }
 }
 async function saveSnapshot() {
@@ -451,7 +434,6 @@ $("replaceOne").onclick = () => {
   const n = $("needle").value;
   if (editor.value.slice(editor.selectionStart, editor.selectionEnd) === n) {
     editor.setRangeText($("replacement").value);
-    changed();
   }
   findNext();
 };
@@ -459,7 +441,6 @@ $("replaceAll").onclick = () => {
   const n = $("needle").value;
   if (n) {
     editor.value = editor.value.split(n).join($("replacement").value);
-    changed();
   }
 };
 function openSettings() {
@@ -556,6 +537,7 @@ for (const [id, key, suffix] of displaySettings) {
     localStorage.setItem(`display.${id}`, control.value);
     applyPreviewPageSize();
     updateEditorHorizontalMargin();
+    editor.requestMeasure();
     if ($("previewPane").classList.contains("open"))
       requestAnimationFrame(syncPreviewToCaret);
   };
@@ -665,13 +647,17 @@ window.desktop.onProofApplied((result) => {
   const caret = Math.min(editor.selectionStart, result.text.length);
   editor.value = result.text;
   editor.setSelectionRange(caret, caret);
-  changed();
   setState(`ゲラの修正を本原稿へ反映しました`);
 });
 
 window.desktop.onMenuCommand((command) => {
   if (typeof command === "object" && command.type === "dictionary-find") {
     findDictionaryHeading(command.heading);
+    return;
+  }
+  if (["undo", "redo", "selectAll"].includes(command)) {
+    if (editor.dom.contains(document.activeElement)) editor.runCommand(command);
+    else document.execCommand(command);
     return;
   }
   const actions = {
