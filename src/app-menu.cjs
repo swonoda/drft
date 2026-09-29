@@ -3,6 +3,7 @@ const { app, Menu } = require("electron");
 function installApplicationMenu({
   sendMenuCommand,
   saveFocusedDocument,
+  editFocusedDocument,
   openDictionaryWindow,
 }) {
   const replaceAccelerator =
@@ -77,13 +78,25 @@ function installApplicationMenu({
     {
       label: "編集",
       submenu: [
-        { role: "undo", label: "元に戻す" },
-        { role: "redo", label: "やり直す" },
+        {
+          label: "元に戻す",
+          accelerator: "CmdOrCtrl+Z",
+          click: () => editFocusedDocument("undo"),
+        },
+        {
+          label: "やり直す",
+          accelerator: process.platform === "darwin" ? "Cmd+Shift+Z" : "Ctrl+Y",
+          click: () => editFocusedDocument("redo"),
+        },
         { type: "separator" },
         { role: "cut", label: "切り取り" },
         { role: "copy", label: "コピー" },
         { role: "paste", label: "貼り付け" },
-        { role: "selectAll", label: "すべて選択" },
+        {
+          label: "すべて選択",
+          accelerator: "CmdOrCtrl+A",
+          click: () => editFocusedDocument("selectAll"),
+        },
         { type: "separator" },
         {
           label: "検索…",
@@ -139,6 +152,13 @@ function installApplicationMenu({
         {
           label: "組版を調整…",
           click: () => sendMenuCommand("adjust-layout"),
+        },
+        { type: "separator" },
+        {
+          role: "toggleDevTools",
+          label: "開発者ツール",
+          accelerator:
+            process.platform === "darwin" ? "Alt+Command+I" : "Ctrl+Shift+I",
         },
       ],
     },
