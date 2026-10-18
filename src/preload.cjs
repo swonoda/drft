@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld("desktop", {
   defaultDocument: () => ipcRenderer.invoke("file:default"),
   restoreDocument: () => ipcRenderer.invoke("file:restore"),
   open: () => ipcRenderer.invoke("file:open"),
+  openPath: (file) => ipcRenderer.invoke("file:openPath", file),
+  listDirectory: (directory) => ipcRenderer.invoke("folder:list", directory),
   save: (text, encoding) => ipcRenderer.invoke("file:save", text, encoding),
   saveAs: (text, encoding) => ipcRenderer.invoke("file:saveAs", text, encoding),
   saveSnapshot: (text, encoding) =>

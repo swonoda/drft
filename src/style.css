@@ -179,7 +179,7 @@ aside {
   top: 0;
   z-index: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 7px 8px 0;
   background: var(--ice);
   border-bottom: 1px solid var(--line);
@@ -539,4 +539,71 @@ dialog select {
 }
 dialog::backdrop {
   background: #4d5f8a24;
+}
+
+#fileBrowser {
+  padding: 8px;
+}
+.file-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.file-toolbar button {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+.file-location {
+  margin: 10px 4px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+.file-status {
+  margin: 8px 4px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.file-status:empty {
+  display: none;
+}
+.file-entry {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+}
+.file-entry svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.file-entry span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-entry:hover:not(:disabled),
+.file-entry.current {
+  background: var(--ice-strong);
+}
+.file-entry.current {
+  color: var(--accent-dark);
+  font-weight: 650;
+}
+.file-entry:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

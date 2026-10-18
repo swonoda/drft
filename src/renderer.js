@@ -1,3 +1,4 @@
+import { createFileBrowser } from "./file-browser-view.js";
 import { createManuscriptEditor } from "./generated/editor.js";
 import {
   parseDocument,
@@ -33,10 +34,45 @@ let filePath = null,
   revision = 0,
   documentGeneration = 0,
   composing = false,
+  documentBusy = false,
   renderTimer,
   saveTimer,
   cursorFrame,
   currentPage = 0;
+const pendingSaves = new Set();
+const fileBrowser = createFileBrowser({
+  root: $("fileBrowser"),
+  desktop: window.desktop,
+  openFile: openDocument,
+});
+async function trackSave(promise) {
+  pendingSaves.add(promise);
+  try {
+    return await promise;
+  } finally {
+    pendingSaves.delete(promise);
+  }
+}
+async function changeDocument(action) {
+  if (documentBusy) return;
+  documentBusy = true;
+  clearTimeout(renderTimer);
+  clearTimeout(saveTimer);
+  cancelAnimationFrame(cursorFrame);
+  editor.dom.inert = true;
+  try {
+    // Finish writes to the old file before changing the main process save target.
+    await Promise.allSettled([...pendingSaves]);
+    await action();
+  } catch (error) {
+    setState(`原稿を開けません: ${error.message}`);
+  } finally {
+    documentBusy = false;
+    editor.dom.inert = false;
+    if (dirty) scheduleUpdates();
+    editor.focus();
+  }
+}
 let showFixHighlights =
   localStorage.getItem("preview.showFixHighlights") !== "false";
 
@@ -113,11 +149,18 @@ function update() {
   updateCharacterCount();
 }
 function showSideView(view) {
-  const fixes = view === "fix";
-  outline.hidden = fixes;
-  fixList.hidden = !fixes;
-  $("outlineTab").classList.toggle("active", !fixes);
-  $("fixTab").classList.toggle("active", fixes);
+  for (const [name, tabId, panelId] of [
+    ["outline", "outlineTab", "outline"],
+    ["fix", "fixTab", "fixList"],
+    ["files", "filesTab", "fileBrowser"],
+  ]) {
+    const selected = view === name;
+    $(panelId).hidden = !selected;
+    $(tabId).classList.toggle("active", selected);
+    $(tabId).setAttribute("aria-selected", String(selected));
+    $(tabId).tabIndex = selected ? 0 : -1;
+  }
+  fileBrowser.setVisible(view === "files");
 }
 function pageCount() {
   return previewPageCount(previewContent.scrollWidth, pageWidth());
@@ -222,7 +265,7 @@ function moveParagraph(from, to, after = false) {
 function scheduleUpdates() {
   clearTimeout(renderTimer);
   clearTimeout(saveTimer);
-  if (composing) return;
+  if (composing || documentBusy) return;
   renderTimer = setTimeout(update, 180);
   saveTimer = setTimeout(autoSave, 1200);
 }
@@ -243,11 +286,11 @@ function loadEditorDocument(text) {
   dirty = false;
 }
 async function autoSave() {
-  if (!dirty || !filePath || composing) return;
+  if (!dirty || !filePath || composing || documentBusy) return;
   const savedRevision = revision;
   const generation = documentGeneration;
   try {
-    await window.desktop.save(editor.value, encoding);
+    await trackSave(window.desktop.save(editor.value, encoding));
     if (generation === documentGeneration && savedRevision === revision) {
       dirty = false;
       setState(`自動保存済み — ${filePath}`);
@@ -277,6 +320,22 @@ editor.contentDOM.addEventListener(
 );
 $("outlineTab").onclick = () => showSideView("outline");
 $("fixTab").onclick = () => showSideView("fix");
+$("filesTab").onclick = () => showSideView("files");
+const sideTabs = [$("outlineTab"), $("fixTab"), $("filesTab")];
+for (const [index, tab] of sideTabs.entries()) {
+  tab.addEventListener("keydown", (event) => {
+    let next;
+    if (event.key === "ArrowRight") next = (index + 1) % sideTabs.length;
+    else if (event.key === "ArrowLeft")
+      next = (index + sideTabs.length - 1) % sideTabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = sideTabs.length - 1;
+    else return;
+    event.preventDefault();
+    sideTabs[next].click();
+    sideTabs[next].focus();
+  });
+}
 $("encoding").onchange = () => {
   encoding = $("encoding").value;
   changed();
@@ -292,6 +351,7 @@ async function loadInitialDocument() {
   } else {
     loadEditorDocument(await window.desktop.defaultDocument());
   }
+  fileBrowser.setCurrentFile(filePath);
   editor.setSelectionRange(0, 0);
   update();
   setState(filePath || "新規");
@@ -299,52 +359,66 @@ async function loadInitialDocument() {
   if (restored?.dictionaryOpen) await window.desktop.openDictionary();
 }
 async function newDocument() {
-  if (dirty && !window.confirm("未保存の変更を破棄して新規作成しますか？"))
-    return;
-  await window.desktop.newFile();
-  filePath = null;
-  encoding = "utf8";
-  $("encoding").value = encoding;
-  loadEditorDocument("");
-  dirty = false;
-  currentPage = 0;
-  update();
-  setState("新規");
-  editor.focus();
-}
-async function openDocument() {
-  if (dirty && !window.confirm("未保存の変更を破棄して別の原稿を開きますか？"))
-    return;
-  const r = await window.desktop.open();
-  if (r) {
-    filePath = r.path;
-    encoding = r.encoding;
+  return changeDocument(async () => {
+    if (dirty && !window.confirm("未保存の変更を破棄して新規作成しますか？"))
+      return;
+    await window.desktop.newFile();
+    filePath = null;
+    encoding = "utf8";
     $("encoding").value = encoding;
-    loadEditorDocument(r.text);
-    dirty = false;
+    loadEditorDocument("");
+    fileBrowser.setCurrentFile(null);
+    currentPage = 0;
+    update();
+    setState("新規");
+  });
+}
+async function openDocument(targetPath) {
+  if (typeof targetPath === "string" && targetPath === filePath) return;
+  return changeDocument(async () => {
+    if (
+      dirty &&
+      !window.confirm("未保存の変更を破棄して別の原稿を開きますか？")
+    )
+      return;
+    const result =
+      typeof targetPath === "string"
+        ? await window.desktop.openPath(targetPath)
+        : await window.desktop.open();
+    if (!result) return;
+    filePath = result.path;
+    encoding = result.encoding;
+    $("encoding").value = encoding;
+    loadEditorDocument(result.text);
+    fileBrowser.setCurrentFile(filePath);
+    currentPage = 0;
     update();
     setState(filePath);
-  }
+  });
 }
 async function saveDocument() {
+  if (documentBusy) return;
   const savedRevision = revision;
   const generation = documentGeneration;
   let p = filePath
-    ? await window.desktop.save(editor.value, encoding)
-    : await window.desktop.saveAs(editor.value, encoding);
+    ? await trackSave(window.desktop.save(editor.value, encoding))
+    : await trackSave(window.desktop.saveAs(editor.value, encoding));
   if (p && generation === documentGeneration) {
     filePath = p;
+    fileBrowser.setCurrentFile(filePath);
     dirty = savedRevision !== revision;
     setState(`${dirty ? "未保存" : "保存済み"} — ${p}`);
     if (dirty) scheduleUpdates();
   }
 }
 async function saveDocumentAs() {
+  if (documentBusy) return;
   const savedRevision = revision;
   const generation = documentGeneration;
-  const p = await window.desktop.saveAs(editor.value, encoding);
+  const p = await trackSave(window.desktop.saveAs(editor.value, encoding));
   if (p && generation === documentGeneration) {
     filePath = p;
+    fileBrowser.setCurrentFile(filePath);
     dirty = savedRevision !== revision;
     setState(`${dirty ? "未保存" : "保存済み"} — ${p}`);
     if (dirty) scheduleUpdates();

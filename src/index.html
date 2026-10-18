@@ -29,13 +29,86 @@
     <main>
       <aside>
         <div class="aside-tabs" role="tablist" aria-label="サイドビュー">
-          <button id="outlineTab" class="active" role="tab">構成</button>
-          <button id="fixTab" role="tab">
+          <button
+            id="outlineTab"
+            class="active"
+            role="tab"
+            aria-selected="true"
+            aria-controls="outline"
+          >
+            構成
+          </button>
+          <button
+            id="fixTab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="fixList"
+            tabindex="-1"
+          >
             修正 <span id="fixBadge">0</span>
           </button>
+          <button
+            id="filesTab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="fileBrowser"
+            tabindex="-1"
+          >
+            ファイル
+          </button>
         </div>
-        <div id="outline" class="side-view"></div>
-        <div id="fixList" class="side-view" hidden></div>
+        <div
+          id="outline"
+          class="side-view"
+          role="tabpanel"
+          aria-labelledby="outlineTab"
+        ></div>
+        <div
+          id="fixList"
+          class="side-view"
+          role="tabpanel"
+          aria-labelledby="fixTab"
+          hidden
+        ></div>
+        <div
+          id="fileBrowser"
+          class="side-view"
+          role="tabpanel"
+          aria-labelledby="filesTab"
+          hidden
+        >
+          <div class="file-toolbar">
+            <button
+              id="fileUp"
+              type="button"
+              title="一つ上のフォルダへ"
+              aria-label="一つ上のフォルダへ"
+              disabled
+            >
+              ↑
+            </button>
+            <button
+              id="fileRefresh"
+              type="button"
+              title="一覧を更新"
+              aria-label="一覧を更新"
+            >
+              ↻
+            </button>
+          </div>
+          <div id="fileLocation" class="file-location"></div>
+          <p
+            id="fileStatus"
+            class="file-status"
+            role="status"
+            aria-live="polite"
+          ></p>
+          <div
+            id="fileEntries"
+            class="file-entries"
+            aria-label="フォルダ内のファイル"
+          ></div>
+        </div>
       </aside>
       <section class="editor-pane">
         <div id="editor"></div>
