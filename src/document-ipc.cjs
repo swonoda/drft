@@ -39,14 +39,6 @@ function registerDocumentIpc({
   ipcMain.handle("folder:list", (_event, directory) =>
     readDirectory(directory || defaultDirectory()),
   );
-  ipcMain.handle("folder:choose", async (_event, directory) => {
-    const result = await dialog.showOpenDialog(getMainWindow(), {
-      title: "表示するフォルダを選択",
-      defaultPath: directory || defaultDirectory(),
-      properties: ["openDirectory"],
-    });
-    return result.canceled ? null : readDirectory(result.filePaths[0]);
-  });
 
   ipcMain.handle("file:restore", async () => {
     const file = getCurrentPath();

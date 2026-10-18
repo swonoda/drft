@@ -99,7 +99,7 @@ test("IPCのフォルダ移動は原稿を変更せず、開く操作は読込�
   });
   const call = (name, ...args) => handlers.get(name)({}, ...args);
   assert.equal((await call("folder:list")).path, root);
-  assert.equal(await call("folder:choose"), null);
+  assert.equal(await call("file:open"), null);
   assert.equal(current, old);
   await assert.rejects(
     call("file:openPath", path.join(root, "missing.txt")),

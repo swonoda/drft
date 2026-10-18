@@ -49,7 +49,6 @@ test("ファイルタブは表示時だけ読み込み、親・子フォルダ�
           return { path: p, name: "sub", parent: "/books", entries: [] };
         return books;
       },
-      chooseDirectory: async () => null,
     },
     async (p) => opened.push(p),
   );
@@ -65,8 +64,6 @@ test("ファイルタブは表示時だけ読み込み、親・子フォルダ�
   assert.match(root.querySelector("#fileStatus").textContent, /空/);
   await root.querySelector("#fileUp").onclick();
   assert.equal(root.querySelector("#fileLocation").title, "/books");
-  await root.querySelector("#fileChoose").onclick();
-  assert.equal(root.querySelector("#fileLocation").title, "/books");
   await root.querySelector("#fileUp").onclick();
   assert.equal(root.querySelector("#fileUp").disabled, true);
   view.setVisible(false);
@@ -79,7 +76,6 @@ test("原稿切替後に古いフォルダの応答が来ても表示を戻さ�
   const resolvers = [];
   const { root, view } = await setup(t, {
     listDirectory: () => new Promise((resolve) => resolvers.push(resolve)),
-    chooseDirectory: async () => null,
   });
   view.setVisible(true);
   view.setCurrentFile("/new/current.txt");
@@ -97,7 +93,6 @@ test("読込エラーでも移動元を保持し、ファイル名をHTMLとし�
       if (fail) throw new Error("アクセス拒否");
       return { ...books, entries: [entry("<img src=x>.txt")] };
     },
-    chooseDirectory: async () => null,
   });
   view.setVisible(true);
   await tick();
@@ -110,5 +105,5 @@ test("読込エラーでも移動元を保持し、ファイル名をHTMLとし�
   await root.querySelector("#fileRefresh").onclick();
   assert.match(root.querySelector("#fileStatus").textContent, /アクセス拒否/);
   assert.equal(root.querySelector("#fileLocation").title, "/books");
-  assert.equal(root.querySelector("#fileChoose").disabled, false);
+  assert.equal(root.querySelector("#fileRefresh").disabled, false);
 });

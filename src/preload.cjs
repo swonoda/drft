@@ -6,8 +6,6 @@ contextBridge.exposeInMainWorld("desktop", {
   open: () => ipcRenderer.invoke("file:open"),
   openPath: (file) => ipcRenderer.invoke("file:openPath", file),
   listDirectory: (directory) => ipcRenderer.invoke("folder:list", directory),
-  chooseDirectory: (directory) =>
-    ipcRenderer.invoke("folder:choose", directory),
   save: (text, encoding) => ipcRenderer.invoke("file:save", text, encoding),
   saveAs: (text, encoding) => ipcRenderer.invoke("file:saveAs", text, encoding),
   saveSnapshot: (text, encoding) =>

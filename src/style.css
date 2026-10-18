@@ -553,9 +553,6 @@ dialog::backdrop {
   padding: 5px 9px;
   font-size: 12px;
 }
-#fileChoose {
-  flex: 1;
-}
 .file-location {
   margin: 10px 4px 6px;
   overflow: hidden;

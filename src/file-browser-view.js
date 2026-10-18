@@ -4,7 +4,6 @@ export function createFileBrowser({ root, desktop, openFile }) {
     status = $("fileStatus"),
     location = $("fileLocation");
   const up = $("fileUp"),
-    choose = $("fileChoose"),
     refresh = $("fileRefresh");
   let folder = null,
     currentFile = null,
@@ -15,11 +14,10 @@ export function createFileBrowser({ root, desktop, openFile }) {
 
   function render() {
     const busy = loading || opening;
-    location.textContent = folder?.name || "フォルダを選択";
+    location.textContent = folder?.name || "";
     location.title = folder?.path || "";
     up.disabled = busy || !folder?.parent;
     refresh.disabled = busy;
-    choose.disabled = busy;
     root.setAttribute("aria-busy", String(busy));
     list.replaceChildren();
     for (const entry of folder?.entries || []) {
@@ -95,7 +93,6 @@ export function createFileBrowser({ root, desktop, openFile }) {
   const reload = () => load(() => desktop.listDirectory(folder?.path));
   up.onclick = () =>
     folder?.parent && load(() => desktop.listDirectory(folder.parent));
-  choose.onclick = () => load(() => desktop.chooseDirectory(folder?.path));
   refresh.onclick = reload;
   render();
   return {

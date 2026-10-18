@@ -56,7 +56,6 @@ test("長文を保存し、変換中は保留、確定後は保存再開、別�
         ],
       };
     },
-    chooseDirectory: async () => null,
     openPath: async (path) => {
       pathOpens.push(path);
       if (path === "missing.txt") throw new Error("ファイルがありません");
