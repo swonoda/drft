@@ -1,8 +1,9 @@
-const { dialog, ipcMain } = require("electron");
+const { app, dialog, ipcMain } = require("electron");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { decodeText, encodeText } = require("./text-encoding.cjs");
 const { ensureTxtExtension, snapshotDefaultPath } = require("./snapshot.cjs");
+const { readDirectory, readTextDocument } = require("./file-browser.cjs");
 const { dictionaryFilePath } = require("./session-state.cjs");
 
 function registerDocumentIpc({
@@ -15,17 +16,36 @@ function registerDocumentIpc({
   openDictionaryWindow,
   sendMenuCommand,
 }) {
+  async function openFile(file) {
+    // Read first: a missing/unreadable file must not replace the save destination.
+    const document = await readTextDocument(file);
+    closeDictionaryWindow();
+    useDocument(document.path);
+    return document;
+  }
   ipcMain.handle("file:open", async () => {
     const result = await dialog.showOpenDialog(getMainWindow(), {
       properties: ["openFile"],
       filters: [{ name: "テキスト", extensions: ["txt"] }],
     });
-    if (result.canceled) return null;
-    closeDictionaryWindow();
-    useDocument(result.filePaths[0]);
-    const file = getCurrentPath();
-    const document = decodeText(await fs.readFile(file));
-    return { path: file, ...document };
+    return result.canceled ? null : openFile(result.filePaths[0]);
+  });
+  ipcMain.handle("file:openPath", (_event, file) => openFile(file));
+
+  const defaultDirectory = () =>
+    getCurrentPath()
+      ? path.dirname(getCurrentPath())
+      : app.getPath("documents");
+  ipcMain.handle("folder:list", (_event, directory) =>
+    readDirectory(directory || defaultDirectory()),
+  );
+  ipcMain.handle("folder:choose", async (_event, directory) => {
+    const result = await dialog.showOpenDialog(getMainWindow(), {
+      title: "表示するフォルダを選択",
+      defaultPath: directory || defaultDirectory(),
+      properties: ["openDirectory"],
+    });
+    return result.canceled ? null : readDirectory(result.filePaths[0]);
   });
 
   ipcMain.handle("file:restore", async () => {

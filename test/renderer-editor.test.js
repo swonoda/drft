@@ -33,10 +33,35 @@ test("長文を保存し、変換中は保留、確定後は保存再開、別�
   };
   const manuscript = "本文。\n".repeat(51021);
   const saved = [];
+  const pathOpens = [];
+  let directoryReads = 0;
   let menu, proof, finishSave;
   let delayed = false;
   window.confirm = () => true;
   window.desktop = {
+    listDirectory: async () => {
+      directoryReads++;
+      return {
+        path: "/books",
+        name: "books",
+        parent: "/",
+        entries: [
+          { name: "other.txt", path: "other.txt", kind: "file", canOpen: true },
+          {
+            name: "missing.txt",
+            path: "missing.txt",
+            kind: "file",
+            canOpen: true,
+          },
+        ],
+      };
+    },
+    chooseDirectory: async () => null,
+    openPath: async (path) => {
+      pathOpens.push(path);
+      if (path === "missing.txt") throw new Error("ファイルがありません");
+      return { path, encoding: "shift_jis", text: "他の原稿" };
+    },
     restoreDocument: async () => ({
       path: "long.txt",
       encoding: "utf8",
@@ -102,6 +127,63 @@ test("長文を保存し、変換中は保留、確定後は保存再開、別�
     assert.equal(view.state.doc.toString(), "次の原稿");
     menu("save");
     await tick();
+    assert.equal(
+      directoryReads,
+      0,
+      "hidden file tab does not read folders during editing",
+    );
+    document.querySelector("#filesTab").click();
+    await tick();
+    assert.equal(document.querySelector("#fileBrowser").hidden, false);
+    assert.equal(document.querySelector("#outline").hidden, true);
+    assert.equal(document.querySelector("#fixList").hidden, true);
+    assert.equal(directoryReads, 1);
+    const fileButton = (name) =>
+      [...document.querySelectorAll(".file-entry")].find(
+        (button) => button.textContent === name,
+      );
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: "未保存" },
+    });
+    assert.equal(directoryReads, 1, "editing does not rescan the folder");
+    window.confirm = () => false;
+    await fileButton("other.txt").onclick();
+    assert.deepEqual(pathOpens, []);
+    assert.equal(view.state.doc.toString(), "次の原稿未保存");
+    window.confirm = () => true;
+    delayed = true;
+    menu("save");
+    const opening = fileButton("other.txt").onclick();
+    await tick();
+    assert.deepEqual(
+      pathOpens,
+      [],
+      "wait for pending write before opening another file",
+    );
+    assert.equal(view.dom.inert, true);
+    finishSave();
+    await opening;
+    delayed = false;
+    await tick();
+    assert.deepEqual(pathOpens, ["other.txt"]);
+    assert.equal(view.state.doc.toString(), "他の原稿");
+    assert.equal(document.querySelector("#encoding").value, "shift_jis");
+    assert.equal(
+      document.querySelector(".file-entry.current").textContent,
+      "other.txt",
+    );
+    menu("undo");
+    assert.equal(view.state.doc.toString(), "他の原稿");
+    await fileButton("missing.txt").onclick();
+    assert.equal(view.state.doc.toString(), "他の原稿");
+    assert.equal(view.dom.inert, false);
+    assert.match(
+      document.querySelector("#state").textContent,
+      /ファイルがありません/,
+    );
+    document.querySelector("#fixTab").click();
+    assert.equal(document.querySelector("#fileBrowser").hidden, true);
+    assert.equal(document.querySelector("#fixList").hidden, false);
     menu("open"); // clear pending refresh/save timers before closing the test DOM
     await tick();
   } finally {
