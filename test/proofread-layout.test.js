@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  compoundRubyGeometry,
   findProofreadBlockPosition,
   findInlineProofreadPosition,
   findProofreadNotePosition,
   numberLongProofreadNotes,
   proofreadLeaderPoints,
+  rubyBraceGeometry,
 } from "../src/proofread-layout.js";
 
 test("本文領域内を含む最寄りの空白へ校正文字を置く", () => {
@@ -212,5 +214,45 @@ test("置換の引出線は右の行間へ出たあと注記まで接続する",
       { x: 58, y: 75 },
       { x: 50, y: 75 },
     ],
+  );
+});
+
+test("縦組みルビの弧は読みの右隣へ上から下まで描く", () => {
+  assert.deepEqual(
+    rubyBraceGeometry({
+      position: { x: 20, y: 30 },
+      noteWidth: 10,
+      noteHeight: 40,
+      gap: 2,
+      bowWidth: 4,
+    }),
+    {
+      path: "M 32 30 Q 36 50 32 70",
+      bounds: { x: 31, y: 29, width: 6, height: 42 },
+    },
+  );
+});
+
+test("本文置換と同じ場所のルビ線は旧語と置換語の両方を含む", () => {
+  assert.deepEqual(
+    compoundRubyGeometry({
+      parentRects: [{ x: 20, y: 10, width: 10, height: 70 }],
+      replacementPosition: { x: 34, y: 40, width: 10, height: 50 },
+      readingWidth: 6,
+      readingHeight: 18,
+      gap: 3,
+      lineOffset: 2,
+      braceGap: 2,
+      bowWidth: 4,
+    }),
+    {
+      line: { x: 46, y: 10, width: 2, height: 80 },
+      reading: { x: 49, y: 41, width: 6, height: 18 },
+      brace: {
+        path: "M 57 41 Q 61 50 57 59",
+        bounds: { x: 56, y: 40, width: 6, height: 20 },
+      },
+      bounds: { x: 45, y: 9, width: 17, height: 81 },
+    },
   );
 });
